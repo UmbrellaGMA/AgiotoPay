@@ -1,7 +1,18 @@
 // Clean initial data schema for AgiotoPay
 
+export const defaultMasterUser = {
+  id: 'usr_master',
+  name: 'Gustavo Melo',
+  email: 'gustavo.melo2802@gmail.com',
+  password: 'Gu22057422@',
+  role: 'admin', // Gestor Principal
+  status: 'active',
+  createdAt: new Date().toISOString(),
+};
+
 export const generateSampleData = () => {
   return {
+    users: [defaultMasterUser],
     clients: [],
     loans: [],
     installments: [],
@@ -16,7 +27,7 @@ export const generateSampleData = () => {
       { id: 'mrk_005', name: 'Bom Pagador', color: '#10b981', icon: '✅', description: 'Cliente com histórico positivo' },
     ],
     settings: {
-      adminName: 'Administrador',
+      adminName: 'Gustavo Melo',
       companyName: 'AgiotoPay',
       currency: 'BRL',
       dateFormat: 'DD/MM/AAAA',

@@ -32,6 +32,12 @@ export default function ClientProfile() {
 
   const [clientForm, setClientForm] = useState({ ...client });
 
+  useEffect(() => {
+    if (client) {
+      setClientForm(client);
+    }
+  }, [client]);
+
   if (!client) return <div className="empty-state"><h3>Cliente não encontrado</h3></div>;
 
   const clientLoans = loans.filter(l => l.clientId === id);

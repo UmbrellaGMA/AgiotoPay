@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { generateSampleData } from '../utils/sampleData';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { generateSampleData, defaultMasterUser } from '../utils/sampleData';
 import { generateId, getInstallmentStatus } from '../utils/formatters';
 
 const AppContext = createContext();
@@ -7,17 +7,37 @@ const AppContext = createContext();
 export const useApp = () => useContext(AppContext);
 
 const STORAGE_KEY = 'agiotopay_data';
+const USER_STORAGE_KEY = 'agiotopay_current_user';
 
 const loadData = () => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // If stored data contains sample data (like cli_001), clear it to keep system clean
-      if (parsed.clients && parsed.clients.some(c => c.id === 'cli_001')) {
-        localStorage.removeItem(STORAGE_KEY);
-        return generateSampleData();
+      // Ensure users array exists with at least default master user
+      if (!parsed.users || parsed.users.length === 0) {
+        parsed.users = [defaultMasterUser];
+      } else {
+        const masterIdx = parsed.users.findIndex(u => u.email === defaultMasterUser.email || u.id === 'usr_master');
+        if (masterIdx !== -1) {
+          parsed.users[masterIdx] = { ...parsed.users[masterIdx], ...defaultMasterUser };
+        } else {
+          parsed.users.unshift(defaultMasterUser);
+        }
       }
+
+      // Guarantee fallback userId: 'usr_master' for any legacy items without userId
+      ['clients', 'loans', 'installments', 'payments', 'activities', 'notifications'].forEach(key => {
+        if (Array.isArray(parsed[key])) {
+          parsed[key] = parsed[key].map(item => ({
+            ...item,
+            userId: item.userId || 'usr_master',
+          }));
+        } else {
+          parsed[key] = [];
+        }
+      });
+
       return parsed;
     }
   } catch (e) {
@@ -38,11 +58,63 @@ export const AppProvider = ({ children }) => {
   const [data, setData] = useState(loadData);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+      return storedUser ? JSON.parse(storedUser) : defaultMasterUser;
+    } catch {
+      return defaultMasterUser;
+    }
+  });
+
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('agiotopay_theme') || 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('agiotopay_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  }, []);
 
   useEffect(() => {
     saveData(data);
   }, [data]);
 
+  // ─────────────────────────────────────────────────────────────
+  // DATA ISOLATION: Each user sees ONLY their own data
+  // ─────────────────────────────────────────────────────────────
+  const userData = useMemo(() => {
+    const empty = {
+      clients: [], loans: [], installments: [], payments: [],
+      activities: [], notifications: [],
+      markers: data.markers || [], settings: data.settings || {}, users: data.users || [],
+    };
+
+    const uid = currentUser?.id || 'usr_master';
+    return {
+      clients: (data.clients || []).filter(c => c.userId === uid || !c.userId),
+      loans: (data.loans || []).filter(l => l.userId === uid || !l.userId),
+      installments: (data.installments || []).filter(i => i.userId === uid || !i.userId),
+      payments: (data.payments || []).filter(p => p.userId === uid || !p.userId),
+      activities: (data.activities || []).filter(a => a.userId === uid || !a.userId),
+      notifications: (data.notifications || []).filter(n => n.userId === uid || !n.userId),
+      markers: data.markers || [],
+      settings: data.settings || {},
+      users: data.users || [],
+    };
+  }, [data, currentUser]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Activity & Notification helpers
+  // ─────────────────────────────────────────────────────────────
   const addActivity = useCallback((type, description, relatedId = null) => {
     const activity = {
       id: generateId(),
@@ -50,12 +122,13 @@ export const AppProvider = ({ children }) => {
       description,
       date: new Date().toISOString(),
       relatedId,
+      userId: currentUser?.id || 'usr_master',
     };
     setData(prev => ({
       ...prev,
-      activities: [activity, ...prev.activities],
+      activities: [activity, ...(prev.activities || [])],
     }));
-  }, []);
+  }, [currentUser]);
 
   const addNotification = useCallback((type, message, relatedId = null) => {
     const notification = {
@@ -65,33 +138,37 @@ export const AppProvider = ({ children }) => {
       date: new Date().toISOString().split('T')[0],
       read: false,
       relatedId,
+      userId: currentUser?.id || 'usr_master',
     };
     setData(prev => ({
       ...prev,
-      notifications: [notification, ...prev.notifications],
+      notifications: [notification, ...(prev.notifications || [])],
     }));
-  }, []);
+  }, [currentUser]);
 
+  // ─────────────────────────────────────────────────────────────
   // Client CRUD
+  // ─────────────────────────────────────────────────────────────
   const addClient = useCallback((client) => {
     const newClient = {
       ...client,
       id: generateId(),
       createdAt: new Date().toISOString(),
       tags: client.tags || [],
+      userId: currentUser?.id || 'usr_master',
     };
     setData(prev => ({
       ...prev,
-      clients: [...prev.clients, newClient],
+      clients: [...(prev.clients || []), newClient],
     }));
     addActivity('client_created', `Novo cliente cadastrado: ${client.name}`, newClient.id);
     return newClient;
-  }, [addActivity]);
+  }, [addActivity, currentUser]);
 
   const updateClient = useCallback((id, updates) => {
     setData(prev => ({
       ...prev,
-      clients: prev.clients.map(c => c.id === id ? { ...c, ...updates } : c),
+      clients: (prev.clients || []).map(c => c.id === id ? { ...c, ...updates } : c),
     }));
     addActivity('client_updated', `Cliente atualizado: ${updates.name || id}`, id);
   }, [addActivity]);
@@ -99,20 +176,24 @@ export const AppProvider = ({ children }) => {
   const deleteClient = useCallback((id) => {
     setData(prev => ({
       ...prev,
-      clients: prev.clients.filter(c => c.id !== id),
+      clients: (prev.clients || []).filter(c => c.id !== id),
     }));
     addActivity('client_deleted', `Cliente removido`, id);
   }, [addActivity]);
 
+  // ─────────────────────────────────────────────────────────────
   // Loan CRUD
+  // ─────────────────────────────────────────────────────────────
   const addLoan = useCallback((loan) => {
+    const uid = currentUser?.id || 'usr_master';
     const newLoan = {
       ...loan,
       id: loan.id || generateId(),
       title: loan.title || 'Empréstimo Sem Título',
-      calculationMode: loan.calculationMode || 'amortized', // 'amortized' or 'interest_only_final_payoff'
+      calculationMode: loan.calculationMode || 'amortized',
       status: 'active',
       createdAt: new Date().toISOString(),
+      userId: uid,
     };
 
     const count = parseInt(newLoan.installmentCount) || 1;
@@ -120,9 +201,6 @@ export const AppProvider = ({ children }) => {
 
     const newInstallments = [];
     if (isInterestOnly) {
-      // In interest_only_final_payoff mode:
-      // Installments 1 to (count - 1): Interest only, 0 principal amortized
-      // Installment count: Interest + Full Principal payoff
       const interestPerInst = Math.round((newLoan.totalInterest / count) * 100) / 100;
 
       for (let i = 0; i < count; i++) {
@@ -149,13 +227,12 @@ export const AppProvider = ({ children }) => {
           paidAmount: 0,
           paidDate: null,
           status: 'open',
+          userId: uid,
         });
       }
 
-      // Update overall loan totalAmount to equal sum of all installments (Interest * count + Principal)
       newLoan.totalAmount = newInstallments.reduce((sum, inst) => sum + inst.totalAmount, 0);
     } else {
-      // Standard Amortized mode
       const installmentAmount = newLoan.totalAmount / count;
       const principalPerInst = newLoan.principalAmount / count;
       const interestPerInst = newLoan.totalInterest / count;
@@ -179,44 +256,45 @@ export const AppProvider = ({ children }) => {
           paidAmount: 0,
           paidDate: null,
           status: 'open',
+          userId: uid,
         });
       }
     }
 
-    setData(prev => {
-      const client = prev.clients.find(c => c.id === newLoan.clientId);
-      return {
-        ...prev,
-        loans: [...prev.loans, newLoan],
-        installments: [...prev.installments, ...newInstallments],
-      };
-    });
+    setData(prev => ({
+      ...prev,
+      loans: [...(prev.loans || []), newLoan],
+      installments: [...(prev.installments || []), ...newInstallments],
+    }));
 
-    const client = data.clients.find(c => c.id === newLoan.clientId);
+    const client = (data.clients || []).find(c => c.id === newLoan.clientId);
     addActivity('loan_created', `Novo débito "${newLoan.title}": R$ ${newLoan.principalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para ${client?.name || 'Cliente'}`, newLoan.id);
     addNotification('loan_created', `Novo débito "${newLoan.title}" criado para ${client?.name || 'Cliente'}`, newLoan.id);
 
     return newLoan;
-  }, [data.clients, addActivity, addNotification]);
+  }, [data.clients, addActivity, addNotification, currentUser]);
 
   const updateLoan = useCallback((id, updates) => {
     setData(prev => ({
       ...prev,
-      loans: prev.loans.map(l => l.id === id ? { ...l, ...updates } : l),
+      loans: (prev.loans || []).map(l => l.id === id ? { ...l, ...updates } : l),
     }));
     addActivity('loan_updated', `Empréstimo atualizado`, id);
   }, [addActivity]);
 
+  // ─────────────────────────────────────────────────────────────
   // Payment
+  // ─────────────────────────────────────────────────────────────
   const registerPayment = useCallback((paymentData) => {
     const payment = {
       ...paymentData,
       id: generateId(),
       createdAt: new Date().toISOString(),
+      userId: currentUser?.id || 'usr_master',
     };
 
     setData(prev => {
-      let newInstallments = [...prev.installments];
+      let newInstallments = [...(prev.installments || [])];
       let remainingAmount = payment.amount;
 
       payment.installmentIds.forEach(instId => {
@@ -239,52 +317,74 @@ export const AppProvider = ({ children }) => {
         }
       });
 
-      // Check if loan is completed
       const loanId = payment.loanId;
       const loanInstallments = newInstallments.filter(i => i.loanId === loanId);
       const allPaid = loanInstallments.every(i => i.paidAmount >= i.totalAmount);
 
-      let newLoans = prev.loans;
+      let newLoans = prev.loans || [];
       if (allPaid) {
-        newLoans = prev.loans.map(l => l.id === loanId ? { ...l, status: 'completed' } : l);
+        newLoans = newLoans.map(l => l.id === loanId ? { ...l, status: 'completed' } : l);
       }
 
       return {
         ...prev,
-        payments: [payment, ...prev.payments],
+        payments: [payment, ...(prev.payments || [])],
         installments: newInstallments,
         loans: newLoans,
       };
     });
 
-    const client = data.clients.find(c => c.id === paymentData.clientId);
+    const client = (data.clients || []).find(c => c.id === paymentData.clientId);
     addActivity('payment', `Pagamento de R$ ${paymentData.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} recebido de ${client?.name || 'Cliente'}`, payment.id);
     addNotification('payment', `${client?.name || 'Cliente'} realizou um pagamento de R$ ${paymentData.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, payment.id);
 
     return payment;
-  }, [data.clients, addActivity, addNotification]);
+  }, [data.clients, addActivity, addNotification, currentUser]);
 
+  // ─────────────────────────────────────────────────────────────
+  // Save Signature for Receipts Permanently
+  // ─────────────────────────────────────────────────────────────
+  const saveSignature = useCallback((installmentId, signatureData) => {
+    const signedAt = new Date().toISOString();
+    setData(prev => ({
+      ...prev,
+      installments: (prev.installments || []).map(i =>
+        i.id === installmentId
+          ? { ...i, signature: signatureData, signedAt }
+          : i
+      )
+    }));
+    addActivity('signature_saved', `Assinatura digital registrada no recibo #${installmentId.toUpperCase()}`, installmentId);
+  }, [addActivity]);
+
+  // ─────────────────────────────────────────────────────────────
   // Notifications
+  // ─────────────────────────────────────────────────────────────
   const markNotificationRead = useCallback((id) => {
     setData(prev => ({
       ...prev,
-      notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n),
+      notifications: (prev.notifications || []).map(n => n.id === id ? { ...n, read: true } : n),
     }));
   }, []);
 
   const markAllNotificationsRead = useCallback(() => {
+    const uid = currentUser?.id || 'usr_master';
     setData(prev => ({
       ...prev,
-      notifications: prev.notifications.map(n => ({ ...n, read: true })),
+      notifications: (prev.notifications || []).map(n =>
+        n.userId === uid ? { ...n, read: true } : n
+      ),
     }));
-  }, []);
+  }, [currentUser]);
 
+  // ─────────────────────────────────────────────────────────────
   // Markers
+  // ─────────────────────────────────────────────────────────────
   const addMarker = useCallback((marker) => {
     const newMarker = { ...marker, id: generateId() };
     setData(prev => ({
       ...prev,
-      markers: [...prev.markers, newMarker],
+      markers: [...(prev.markers || []), newMarker],
     }));
     return newMarker;
   }, []);
@@ -292,11 +392,13 @@ export const AppProvider = ({ children }) => {
   const deleteMarker = useCallback((id) => {
     setData(prev => ({
       ...prev,
-      markers: prev.markers.filter(m => m.id !== id),
+      markers: (prev.markers || []).filter(m => m.id !== id),
     }));
   }, []);
 
+  // ─────────────────────────────────────────────────────────────
   // Settings
+  // ─────────────────────────────────────────────────────────────
   const updateSettings = useCallback((updates) => {
     setData(prev => ({
       ...prev,
@@ -304,59 +406,71 @@ export const AppProvider = ({ children }) => {
     }));
   }, []);
 
+  // ─────────────────────────────────────────────────────────────
   // Reset data
+  // ─────────────────────────────────────────────────────────────
   const resetData = useCallback(() => {
-    const freshData = generateSampleData();
-    setData(freshData);
-    saveData(freshData);
-  }, []);
+    const uid = currentUser?.id || 'usr_master';
+    if (!uid) return;
+    setData(prev => ({
+      ...prev,
+      clients: (prev.clients || []).filter(c => c.userId !== uid),
+      loans: (prev.loans || []).filter(l => l.userId !== uid),
+      installments: (prev.installments || []).filter(i => i.userId !== uid),
+      payments: (prev.payments || []).filter(p => p.userId !== uid),
+      activities: (prev.activities || []).filter(a => a.userId !== uid),
+      notifications: (prev.notifications || []).filter(n => n.userId !== uid),
+    }));
+  }, [currentUser]);
 
-  // Computed values
+  // ─────────────────────────────────────────────────────────────
+  // Computed helpers
+  // ─────────────────────────────────────────────────────────────
   const getClientLoans = useCallback((clientId) => {
-    return data.loans.filter(l => l.clientId === clientId);
-  }, [data.loans]);
+    return userData.loans.filter(l => l.clientId === clientId);
+  }, [userData.loans]);
 
   const getClientInstallments = useCallback((clientId) => {
-    return data.installments.filter(i => i.clientId === clientId);
-  }, [data.installments]);
+    return userData.installments.filter(i => i.clientId === clientId);
+  }, [userData.installments]);
 
   const getLoanInstallments = useCallback((loanId) => {
-    return data.installments.filter(i => i.loanId === loanId);
-  }, [data.installments]);
+    return userData.installments.filter(i => i.loanId === loanId);
+  }, [userData.installments]);
 
   const getClientPayments = useCallback((clientId) => {
-    return data.payments.filter(p => p.clientId === clientId);
-  }, [data.payments]);
+    return userData.payments.filter(p => p.clientId === clientId);
+  }, [userData.payments]);
 
+  // ─────────────────────────────────────────────────────────────
   // Dashboard stats
-  const stats = (() => {
-    const activeLoans = data.loans.filter(l => l.status === 'active');
-    const completedLoans = data.loans.filter(l => l.status === 'completed');
+  // ─────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const activeLoans = userData.loans.filter(l => l.status === 'active');
+    const completedLoans = userData.loans.filter(l => l.status === 'completed');
 
     const capitalEmprestado = activeLoans.reduce((sum, l) => sum + l.principalAmount, 0);
     const totalAReceber = activeLoans.reduce((sum, l) => sum + l.totalAmount, 0);
     const lucroPrevisto = activeLoans.reduce((sum, l) => sum + l.totalInterest, 0);
 
-    const activeInstallments = data.installments.filter(i =>
+    const activeInstallments = userData.installments.filter(i =>
       activeLoans.some(l => l.id === i.loanId)
     );
 
     const totalPaidActive = activeInstallments.reduce((sum, i) => sum + i.paidAmount, 0);
-    const totalPaidCompleted = data.installments
+    const totalPaidCompleted = userData.installments
       .filter(i => completedLoans.some(l => l.id === i.loanId))
       .reduce((sum, i) => sum + i.paidAmount, 0);
 
     const valorRecebido = totalPaidActive + totalPaidCompleted;
     const dinheiroNaRua = totalAReceber - totalPaidActive;
 
-    // Calculate realized profit
     const totalPrincipalPaid = activeInstallments
       .reduce((sum, i) => sum + Math.min(i.paidAmount, i.principalAmount), 0);
     const lucroRealizadoActive = totalPaidActive - totalPrincipalPaid;
     const lucroRealizadoCompleted = completedLoans.reduce((sum, l) => sum + l.totalInterest, 0);
     const lucroRealizado = lucroRealizadoActive + lucroRealizadoCompleted;
 
-    // Overdue installments
     const overdueInstallments = activeInstallments.filter(i => {
       const status = getInstallmentStatus(i);
       return status === 'overdue' || (i.status !== 'paid' && status === 'overdue');
@@ -364,7 +478,6 @@ export const AppProvider = ({ children }) => {
     const parcelasEmAtraso = overdueInstallments.length;
     const valorEmAtraso = overdueInstallments.reduce((sum, i) => sum + (i.totalAmount - i.paidAmount), 0);
 
-    // Near due installments
     const nearDueInstallments = activeInstallments.filter(i => {
       const status = getInstallmentStatus(i);
       return status === 'near_due' || status === 'due_today';
@@ -372,7 +485,6 @@ export const AppProvider = ({ children }) => {
     const parcelasAVencer = nearDueInstallments.length;
     const valorAVencer = nearDueInstallments.reduce((sum, i) => sum + (i.totalAmount - i.paidAmount), 0);
 
-    // Active clients
     const clientesAtivos = new Set(activeLoans.map(l => l.clientId)).size;
 
     return {
@@ -390,11 +502,105 @@ export const AppProvider = ({ children }) => {
       totalEmprestimosAtivos: activeLoans.length,
       totalEmprestimosQuitados: completedLoans.length,
     };
-  })();
+  }, [userData.loans, userData.installments]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Auth & User Management Functions
+  // ─────────────────────────────────────────────────────────────
+  const login = useCallback((email, password) => {
+    const user = data.users?.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (!user) {
+      return { success: false, error: 'Usuário não encontrado.' };
+    }
+    if (user.password !== password) {
+      return { success: false, error: 'Senha incorreta.' };
+    }
+    if (user.status === 'blocked') {
+      return { success: false, error: 'Usuário bloqueado. Entre em contato com o gestor principal.' };
+    }
+
+    const sessionUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+    };
+    setCurrentUser(sessionUser);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(sessionUser));
+    return { success: true, user: sessionUser };
+  }, [data.users]);
+
+  const logout = useCallback(() => {
+    setCurrentUser(defaultMasterUser);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(defaultMasterUser));
+  }, []);
+
+  const addUser = useCallback((newUser) => {
+    const exists = data.users?.some(u => u.email.toLowerCase() === newUser.email.trim().toLowerCase());
+    if (exists) {
+      return { success: false, error: 'Já existe um usuário cadastrado com este e-mail.' };
+    }
+
+    const created = {
+      id: generateId(),
+      name: newUser.name,
+      email: newUser.email.trim(),
+      password: newUser.password,
+      role: newUser.role || 'operator',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+
+    setData(prev => ({
+      ...prev,
+      users: [...(prev.users || []), created],
+    }));
+    addActivity('user_created', `Novo usuário cadastrado: ${created.name} (${created.email})`);
+    return { success: true, user: created };
+  }, [data.users, addActivity]);
+
+  const updateUser = useCallback((id, updates) => {
+    setData(prev => ({
+      ...prev,
+      users: (prev.users || []).map(u => u.id === id ? { ...u, ...updates } : u),
+    }));
+    if (currentUser?.id === id) {
+      const updatedSession = { ...currentUser, ...updates };
+      delete updatedSession.password;
+      setCurrentUser(updatedSession);
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedSession));
+    }
+    addActivity('user_updated', `Usuário atualizado: ${id}`);
+  }, [currentUser, addActivity]);
+
+  const deleteUser = useCallback((id) => {
+    if (currentUser?.id === id) {
+      return { success: false, error: 'Você não pode excluir sua própria conta enquanto estiver conectado.' };
+    }
+    setData(prev => ({
+      ...prev,
+      users: (prev.users || []).filter(u => u.id !== id),
+      clients: (prev.clients || []).filter(c => c.userId !== id),
+      loans: (prev.loans || []).filter(l => l.userId !== id),
+      installments: (prev.installments || []).filter(i => i.userId !== id),
+      payments: (prev.payments || []).filter(p => p.userId !== id),
+      activities: (prev.activities || []).filter(a => a.userId !== id),
+      notifications: (prev.notifications || []).filter(n => n.userId !== id),
+    }));
+    addActivity('user_deleted', `Usuário excluído: ${id}`);
+    return { success: true };
+  }, [currentUser, addActivity]);
 
   const value = {
-    ...data,
+    ...userData,
     stats,
+    currentUser,
+    login,
+    logout,
+    addUser,
+    updateUser,
+    deleteUser,
     searchQuery,
     setSearchQuery,
     sidebarOpen,
@@ -405,6 +611,7 @@ export const AppProvider = ({ children }) => {
     addLoan,
     updateLoan,
     registerPayment,
+    saveSignature,
     markNotificationRead,
     markAllNotificationsRead,
     addMarker,
@@ -417,6 +624,9 @@ export const AppProvider = ({ children }) => {
     getClientPayments,
     addActivity,
     addNotification,
+    theme,
+    setTheme,
+    toggleTheme,
   };
 
   return (

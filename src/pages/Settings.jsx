@@ -1,9 +1,15 @@
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Settings as SettingsIcon, Plus, Trash2, RotateCcw, X } from 'lucide-react';
 
 export default function Settings() {
-  const { settings, updateSettings, markers, addMarker, deleteMarker, activities, resetData } = useApp();
+  const { settings, updateSettings, markers, addMarker, deleteMarker, activities, resetData, currentUser } = useApp();
+
+  // Only admin can access settings
+  if (currentUser?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
   const [tab, setTab] = useState('general');
   const [showMarkerModal, setShowMarkerModal] = useState(false);
   const [markerForm, setMarkerForm] = useState({ name: '', color: '#6366f1', icon: '🔖', description: '' });

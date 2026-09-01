@@ -2,27 +2,32 @@ import { NavLink } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import {
   LayoutDashboard, MapPin, Users, Landmark, Receipt, CreditCard,
-  Calendar, FileBarChart, Bell, Settings, X
+  Calendar, FileBarChart, Bell, Settings, X, UserCheck
 } from 'lucide-react';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/dinheiro-na-rua', icon: MapPin, label: 'Dinheiro na Rua' },
-  { to: '/clientes', icon: Users, label: 'Clientes' },
-  { to: '/emprestimos', icon: Landmark, label: 'Empréstimos' },
-  { to: '/parcelas', icon: Receipt, label: 'Parcelas' },
-  { to: '/pagamentos', icon: CreditCard, label: 'Pagamentos' },
-];
-
-const navItems2 = [
-  { to: '/agenda', icon: Calendar, label: 'Agenda' },
-  { to: '/relatorios', icon: FileBarChart, label: 'Relatórios' },
-  { to: '/notificacoes', icon: Bell, label: 'Notificações' },
-  { to: '/configuracoes', icon: Settings, label: 'Configurações' },
-];
-
 export default function Sidebar() {
-  const { sidebarOpen, setSidebarOpen } = useApp();
+  const { sidebarOpen, setSidebarOpen, currentUser, notifications } = useApp();
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const menuItems = [
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard', badge: 'Novo' },
+    { to: '/dinheiro-na-rua', icon: MapPin, label: 'Dinheiro na Rua' },
+    { to: '/clientes', icon: Users, label: 'Clientes' },
+    { to: '/emprestimos', icon: Landmark, label: 'Empréstimos' },
+    { to: '/parcelas', icon: Receipt, label: 'Parcelas' },
+    { to: '/pagamentos', icon: CreditCard, label: 'Pagamentos' },
+  ];
+
+  const toolsItems = [
+    { to: '/agenda', icon: Calendar, label: 'Agenda' },
+    { to: '/relatorios', icon: FileBarChart, label: 'Relatórios' },
+    { to: '/notificacoes', icon: Bell, label: 'Notificações', badge: unreadCount > 0 ? unreadCount : null },
+  ];
+
+  const adminItems = [
+    { to: '/usuarios', icon: UserCheck, label: 'Usuários Agiotas' },
+    { to: '/configuracoes', icon: Settings, label: 'Configurações' },
+  ];
 
   return (
     <>
@@ -30,27 +35,41 @@ export default function Sidebar() {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <div className="logo">A</div>
-          <h2>AgiotoPay</h2>
+          <h2>AGIOTOPAY</h2>
           <button className="menu-btn header-btn" style={{ marginLeft: 'auto' }} onClick={() => setSidebarOpen(false)}>
             <X size={18} />
           </button>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map(item => (
+          <div className="sidebar-section-title">MENU</div>
+          {menuItems.map(item => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'} onClick={() => setSidebarOpen(false)}>
               <item.icon size={18} />
-              {item.label}
+              <span>{item.label}</span>
+              {item.badge && <span className="nav-badge">{item.badge}</span>}
             </NavLink>
           ))}
-          <div className="sidebar-section">
-            <div className="sidebar-section-title">Ferramentas</div>
-            {navItems2.map(item => (
-              <NavLink key={item.to} to={item.to} onClick={() => setSidebarOpen(false)}>
-                <item.icon size={18} />
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
+
+          <div className="sidebar-section-title" style={{ marginTop: 16 }}>FERRAMENTAS</div>
+          {toolsItems.map(item => (
+            <NavLink key={item.to} to={item.to} onClick={() => setSidebarOpen(false)}>
+              <item.icon size={18} />
+              <span>{item.label}</span>
+              {item.badge && <span className="nav-badge" style={{ background: 'var(--red)' }}>{item.badge}</span>}
+            </NavLink>
+          ))}
+
+          {currentUser?.role === 'admin' && (
+            <>
+              <div className="sidebar-section-title" style={{ marginTop: 16 }}>ADMINISTRATIVO</div>
+              {adminItems.map(item => (
+                <NavLink key={item.to} to={item.to} onClick={() => setSidebarOpen(false)}>
+                  <item.icon size={18} />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
       </aside>
     </>
