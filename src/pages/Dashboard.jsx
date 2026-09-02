@@ -356,11 +356,11 @@ export default function Dashboard() {
                   <td>
                     <div className="user-cell">
                       <div className="avatar" style={{ width: 34, height: 34, fontSize: '0.8rem' }}>
-                        {a.type[0].toUpperCase()}
+                        {(a.type || 'A')[0].toUpperCase()}
                       </div>
                       <div className="user-cell-info">
                         <strong>{a.type === 'loan_created' ? 'Novo Empréstimo' : a.type === 'payment' ? 'Pagamento' : a.type === 'client_created' ? 'Novo Cliente' : 'Atividade'}</strong>
-                        <span>ID #{a.id.slice(0, 6)}</span>
+                        <span>ID #{String(a.id || '').slice(0, 6)}</span>
                       </div>
                     </div>
                   </td>

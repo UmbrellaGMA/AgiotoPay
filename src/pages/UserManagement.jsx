@@ -138,7 +138,7 @@ export default function UserManagement() {
                   <tr key={u.id}>
                     <td>
                       <div className="flex align-center gap-8">
-                        <div className="avatar" style={{ width: 32, height: 32, fontSize: '0.85rem' }}>{u.name[0]}</div>
+                        <div className="avatar" style={{ width: 32, height: 32, fontSize: '0.85rem' }}>{(u.name || 'U')[0].toUpperCase()}</div>
                         <div>
                           <strong>{u.name}</strong>
                           {isSelf && <span className="badge-status blue ml-8" style={{ fontSize: '0.7rem' }}>Você</span>}

@@ -134,7 +134,7 @@ export default function Reports() {
             <table>
               <thead><tr><th>Data</th><th>Cliente</th><th>Valor</th><th>Forma</th></tr></thead>
               <tbody>
-                {filteredPayments.sort((a, b) => b.date.localeCompare(a.date)).map(p => {
+                {[...filteredPayments].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(p => {
                   const client = clients.find(c => c.id === p.clientId);
                   return (<tr key={p.id}><td>{formatDate(p.date)}</td><td>{client?.name}</td><td className="text-green font-bold">{formatCurrency(p.amount)}</td><td style={{ textTransform: 'capitalize' }}>{p.method}</td></tr>);
                 })}

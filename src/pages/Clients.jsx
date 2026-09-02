@@ -92,7 +92,7 @@ export default function Clients() {
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} className="clickable" onClick={() => navigate(`/clientes/${c.id}`)}>
-                    <td><div className="flex gap-8" style={{ alignItems: 'center' }}><div className="avatar">{c.name[0]}</div><div><strong>{c.name}</strong><br /><span className="text-muted" style={{ fontSize: '0.75rem' }}>{formatCPF(c.cpf)}</span></div></div></td>
+                    <td><div className="flex gap-8" style={{ alignItems: 'center' }}><div className="avatar">{(c.name || 'C')[0].toUpperCase()}</div><div><strong>{c.name}</strong><br /><span className="text-muted" style={{ fontSize: '0.75rem' }}>{formatCPF(c.cpf)}</span></div></div></td>
                     <td><span className="badge-status" style={{ background: getClientStatusColor(c.status) + '20', color: getClientStatusColor(c.status) }}>{getClientStatusLabel(c.status)}</span></td>
                     <td>{formatPhone(c.phone)}</td>
                     <td>{c.activeCount}/{c.totalLoans}</td>
@@ -113,7 +113,7 @@ export default function Clients() {
           {filtered.map(c => (
             <div key={c.id} className="client-card" onClick={() => navigate(`/clientes/${c.id}`)}>
               <div className="client-card-top">
-                <div className="avatar">{c.name[0]}</div>
+                <div className="avatar">{(c.name || 'C')[0].toUpperCase()}</div>
                 <div className="client-card-info">
                   <h4>{c.name}</h4>
                   <p>{formatPhone(c.phone)}</p>

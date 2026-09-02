@@ -45,7 +45,7 @@ export default function Loans() {
     let r = loanData;
     if (search) {
       const q = search.toLowerCase();
-      r = r.filter(l => l.clientName.toLowerCase().includes(q) || (l.title && l.title.toLowerCase().includes(q)) || l.id.includes(q));
+      r = r.filter(l => l.clientName.toLowerCase().includes(q) || (l.title && l.title.toLowerCase().includes(q)) || String(l.id || '').includes(q));
     }
     if (filter === 'active') r = r.filter(l => l.status === 'active');
     else if (filter === 'completed') r = r.filter(l => l.status === 'completed');
@@ -154,8 +154,8 @@ export default function Loans() {
               {filtered.map(l => (
                 <tr key={l.id} className="clickable" onClick={() => navigate(`/emprestimos/${l.id}`)}>
                   <td>
-                    <div><strong>{l.title || `Débito #${l.id.slice(-6).toUpperCase()}`}</strong></div>
-                    <small className="text-muted">#{l.id.slice(-6).toUpperCase()}</small>
+                    <div><strong>{l.title || `Débito #${String(l.id || '').slice(-6).toUpperCase()}`}</strong></div>
+                    <small className="text-muted">#{String(l.id || '').slice(-6).toUpperCase()}</small>
                   </td>
                   <td><strong>{l.clientName}</strong></td>
                   <td>{formatCurrency(l.principalAmount)}</td>

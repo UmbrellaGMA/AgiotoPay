@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate, getInstallmentStatus } from '../utils/formatters';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Trash2 } from 'lucide-react';
 
 export default function Payments() {
-  const { clients, loans, installments, payments, registerPayment } = useApp();
+  const { clients, loans, installments, payments, registerPayment, deletePayment } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ clientId: '', loanId: '', installmentIds: [], amount: '', date: new Date().toISOString().split('T')[0], method: 'pix', notes: '' });
 
@@ -18,11 +18,11 @@ export default function Payments() {
     return installments.filter(i => i.loanId === form.loanId && i.paidAmount < i.totalAmount).sort((a, b) => a.number - b.number);
   }, [form.loanId, installments]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const amt = parseFloat(form.amount);
     if (!amt || !form.clientId || !form.loanId || form.installmentIds.length === 0) return;
-    registerPayment({ clientId: form.clientId, loanId: form.loanId, installmentIds: form.installmentIds, amount: amt, date: form.date, method: form.method, notes: form.notes });
+    await registerPayment({ clientId: form.clientId, loanId: form.loanId, installmentIds: form.installmentIds, amount: amt, date: form.date, method: form.method, notes: form.notes });
     setForm({ clientId: '', loanId: '', installmentIds: [], amount: '', date: new Date().toISOString().split('T')[0], method: 'pix', notes: '' });
     setShowModal(false);
   };
@@ -32,6 +32,12 @@ export default function Payments() {
       ...prev,
       installmentIds: prev.installmentIds.includes(id) ? prev.installmentIds.filter(i => i !== id) : [...prev.installmentIds, id],
     }));
+  };
+
+  const handleDeletePayment = async (p) => {
+    if (window.confirm(`Deseja apagar/estornar o pagamento de ${formatCurrency(p.amount)}?`)) {
+      await deletePayment(p.id);
+    }
   };
 
   const selectedTotal = useMemo(() => {
@@ -48,9 +54,9 @@ export default function Payments() {
       <div className="table-card">
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Data</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Empréstimo</th><th>Observações</th></tr></thead>
+            <thead><tr><th>Data</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Empréstimo</th><th>Observações</th><th>Ações</th></tr></thead>
             <tbody>
-              {payments.sort((a, b) => b.date.localeCompare(a.date)).map(p => {
+              {[...payments].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(p => {
                 const client = clients.find(c => c.id === p.clientId);
                 return (
                   <tr key={p.id}>
@@ -60,6 +66,16 @@ export default function Payments() {
                     <td style={{ textTransform: 'capitalize' }}>{p.method}</td>
                     <td style={{ fontFamily: 'monospace' }}>{p.loanId?.slice(-6).toUpperCase()}</td>
                     <td>{p.notes || '-'}</td>
+                    <td>
+                      <button
+                        className="btn-action delete"
+                        title="Apagar / Estornar Pagamento"
+                        onClick={() => handleDeletePayment(p)}
+                        style={{ color: 'var(--red)' }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

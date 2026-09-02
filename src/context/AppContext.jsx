@@ -150,10 +150,37 @@ export const AppProvider = ({ children }) => {
   }, [addActivity]);
 
   const deleteClient = useCallback(async (id) => {
+    await supabase.from('payments').delete().eq('client_id', id);
+    await supabase.from('installments').delete().eq('client_id', id);
+    await supabase.from('loans').delete().eq('client_id', id);
     await supabase.from('clients').delete().eq('id', id);
+    setPayments(prev => prev.filter(p => p.clientId !== id));
+    setInstallments(prev => prev.filter(i => i.clientId !== id));
+    setLoans(prev => prev.filter(l => l.clientId !== id));
     setClients(prev => prev.filter(c => c.id !== id));
-    addActivity('client_deleted', 'Cliente removido', id);
+    addActivity('client_deleted', 'Cliente e todos os seus débitos foram removidos', id);
   }, [addActivity]);
+
+  // Helper for due dates
+  const calculateDueDate = (firstDueDateStr, periodicity, index) => {
+    if (!firstDueDateStr) return new Date().toISOString().split('T')[0];
+    const [year, month, day] = firstDueDateStr.split('-').map(Number);
+    if (periodicity === 'monthly') {
+      const d = new Date(year, month - 1 + index, day);
+      const expectedMonth = (month - 1 + index) % 12;
+      const targetMonth = expectedMonth < 0 ? expectedMonth + 12 : expectedMonth;
+      if (d.getMonth() !== targetMonth) {
+        d.setDate(0);
+      }
+      return d.toISOString().split('T')[0];
+    } else {
+      const d = new Date(year, month - 1, day);
+      if (periodicity === 'weekly') d.setDate(d.getDate() + (index * 7));
+      else if (periodicity === 'biweekly') d.setDate(d.getDate() + (index * 15));
+      else if (periodicity === 'daily') d.setDate(d.getDate() + index);
+      return d.toISOString().split('T')[0];
+    }
+  };
 
   // ── LOAN CRUD ──
   const addLoan = useCallback(async (loan) => {
@@ -166,7 +193,6 @@ export const AppProvider = ({ children }) => {
 
     const loanRow = toSnake(newLoan);
     delete loanRow.id;
-    // Remove fields not in loans table
     delete loanRow.user_id;
 
     const { data: loanData, error: loanErr } = await supabase.from('loans').insert(loanRow).select().single();
@@ -180,16 +206,12 @@ export const AppProvider = ({ children }) => {
     if (isInterestOnly) {
       const interestPerInst = Math.round((savedLoan.totalInterest / count) * 100) / 100;
       for (let i = 0; i < count; i++) {
-        const dueDate = new Date(savedLoan.firstDueDate + 'T00:00:00');
-        if (savedLoan.periodicity === 'monthly') dueDate.setMonth(dueDate.getMonth() + i);
-        else if (savedLoan.periodicity === 'weekly') dueDate.setDate(dueDate.getDate() + (i * 7));
-        else if (savedLoan.periodicity === 'biweekly') dueDate.setDate(dueDate.getDate() + (i * 15));
-        else if (savedLoan.periodicity === 'daily') dueDate.setDate(dueDate.getDate() + i);
+        const dueDateStr = calculateDueDate(savedLoan.firstDueDate, savedLoan.periodicity, i);
         const isLast = i === count - 1;
         const principal = isLast ? Number(savedLoan.principalAmount) : 0;
         newInstallments.push({
           loan_id: savedLoan.id, client_id: savedLoan.clientId, number: i + 1,
-          due_date: dueDate.toISOString().split('T')[0],
+          due_date: dueDateStr,
           principal_amount: Math.round(principal * 100) / 100,
           interest_amount: Math.round(interestPerInst * 100) / 100,
           total_amount: Math.round((principal + interestPerInst) * 100) / 100,
@@ -201,14 +223,10 @@ export const AppProvider = ({ children }) => {
       const principalPerInst = savedLoan.principalAmount / count;
       const interestPerInst = savedLoan.totalInterest / count;
       for (let i = 0; i < count; i++) {
-        const dueDate = new Date(savedLoan.firstDueDate + 'T00:00:00');
-        if (savedLoan.periodicity === 'monthly') dueDate.setMonth(dueDate.getMonth() + i);
-        else if (savedLoan.periodicity === 'weekly') dueDate.setDate(dueDate.getDate() + (i * 7));
-        else if (savedLoan.periodicity === 'biweekly') dueDate.setDate(dueDate.getDate() + (i * 15));
-        else if (savedLoan.periodicity === 'daily') dueDate.setDate(dueDate.getDate() + i);
+        const dueDateStr = calculateDueDate(savedLoan.firstDueDate, savedLoan.periodicity, i);
         newInstallments.push({
           loan_id: savedLoan.id, client_id: savedLoan.clientId, number: i + 1,
-          due_date: dueDate.toISOString().split('T')[0],
+          due_date: dueDateStr,
           principal_amount: Math.round(principalPerInst * 100) / 100,
           interest_amount: Math.round(interestPerInst * 100) / 100,
           total_amount: Math.round(installmentAmount * 100) / 100,
@@ -294,6 +312,37 @@ export const AppProvider = ({ children }) => {
     addNotification('payment', `${client?.name || 'Cliente'} realizou um pagamento de R$ ${paymentData.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, payment.id);
     return payment;
   }, [clients, installments, addActivity, addNotification]);
+
+  const deletePayment = useCallback(async (paymentId) => {
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment) return;
+
+    await supabase.from('payments').delete().eq('id', paymentId);
+    setPayments(prev => prev.filter(p => p.id !== paymentId));
+
+    if (payment.installmentIds && payment.installmentIds.length > 0) {
+      const remainingPayments = payments.filter(p => p.id !== paymentId && p.loanId === payment.loanId);
+      const loanInsts = installments.filter(i => i.loanId === payment.loanId);
+
+      for (const inst of loanInsts) {
+        let paidForInst = 0;
+        let lastPaidDate = null;
+        for (const p of remainingPayments) {
+          if (p.installmentIds?.includes(inst.id)) {
+            paidForInst += Math.min(p.amount, inst.totalAmount - paidForInst);
+            lastPaidDate = p.date;
+          }
+        }
+        const newStatus = paidForInst >= inst.totalAmount ? 'paid' : paidForInst > 0 ? 'partial' : 'open';
+        await supabase.from('installments').update({ paid_amount: paidForInst, paid_date: paidForInst > 0 ? lastPaidDate : null, status: newStatus }).eq('id', inst.id);
+        setInstallments(prev => prev.map(i => i.id === inst.id ? { ...i, paidAmount: paidForInst, paidDate: paidForInst > 0 ? lastPaidDate : null, status: newStatus } : i));
+      }
+      await supabase.from('loans').update({ status: 'active' }).eq('id', payment.loanId);
+      setLoans(prev => prev.map(l => l.id === payment.loanId ? { ...l, status: 'active' } : l));
+    }
+
+    addActivity('payment_deleted', `Pagamento de R$ ${payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi estornado/removido.`, paymentId);
+  }, [payments, installments, addActivity]);
 
   // ── SIGNATURE ──
   const saveSignature = useCallback(async (installmentId, signatureData) => {
@@ -448,7 +497,7 @@ export const AppProvider = ({ children }) => {
     login, logout, addUser, updateUser, deleteUser,
     searchQuery, setSearchQuery, sidebarOpen, setSidebarOpen,
     addClient, updateClient, deleteClient,
-    addLoan, updateLoan, deleteLoan, registerPayment, saveSignature,
+    addLoan, updateLoan, deleteLoan, registerPayment, deletePayment, saveSignature,
     markNotificationRead, markAllNotificationsRead,
     addMarker, deleteMarker, updateSettings, resetData,
     getClientLoans, getClientInstallments, getLoanInstallments, getClientPayments,

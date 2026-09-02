@@ -25,7 +25,7 @@ export default function Installments() {
     else if (filter === 'overdue') r = r.filter(i => i.computedStatus === 'overdue');
     else if (filter === 'near_due') r = r.filter(i => i.computedStatus === 'near_due' || i.computedStatus === 'due_today');
     else if (filter === 'partial') r = r.filter(i => i.computedStatus === 'partial');
-    return r.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    return [...r].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
   }, [instData, filter, search]);
 
   const statusColors = { paid: 'green', open: 'blue', near_due: 'yellow', due_today: 'orange', overdue: 'red', partial: 'gray', renegotiated: 'gray' };

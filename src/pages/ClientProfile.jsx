@@ -154,7 +154,7 @@ export default function ClientProfile() {
       </div>
 
       <div className="profile-header">
-        <div className="avatar avatar-lg">{client.name[0]}</div>
+        <div className="avatar avatar-lg">{(client.name || 'C')[0].toUpperCase()}</div>
         <div className="profile-info">
           <div className="flex-between">
             <div>
@@ -244,8 +244,8 @@ export default function ClientProfile() {
                 {clientLoans.map(l => (
                   <tr key={l.id} className="clickable" onClick={() => navigate(`/emprestimos/${l.id}`)}>
                     <td>
-                      <div><strong>{l.title || `Débito #${l.id.slice(-6).toUpperCase()}`}</strong></div>
-                      <small className="text-muted">#{l.id.slice(-6).toUpperCase()}</small>
+                      <div><strong>{l.title || `Débito #${String(l.id || '').slice(-6).toUpperCase()}`}</strong></div>
+                      <small className="text-muted">#{String(l.id || '').slice(-6).toUpperCase()}</small>
                     </td>
                     <td>{formatCurrency(l.principalAmount)}</td>
                     <td>{formatCurrency(l.totalInterest)} ({l.interestRate}%)</td>
