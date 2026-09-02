@@ -141,6 +141,8 @@
 html {
   font-size: 14px;
   scroll-behavior: smooth;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -150,11 +152,11 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
 }
 
-a {
-  color: var(--accent);
-  text-decoration: none;
+a, button, input, select, textarea {
+  touch-action: manipulation;
 }
 
 button {
@@ -1709,11 +1711,15 @@ tr:hover td {
     border-radius: 16px;
   }
 
+  /* Mobile Input Font Size (Prevents iOS/Android Focus Auto-Zoom) */
+  input, select, textarea, .form-input, .form-textarea, .search-input, .header-search input {
+    font-size: 16px !important;
+  }
+
   .search-input {
     width: 100%;
     margin-bottom: 8px;
     height: 38px;
-    font-size: 0.85rem;
   }
 
   /* Stats Grid 2-Column Responsive Layout */
