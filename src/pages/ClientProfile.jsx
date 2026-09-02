@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate, formatPhone, formatCPF, getInstallmentStatus, getStatusLabel, getClientStatus, getClientStatusLabel, getClientStatusColor } from '../utils/formatters';
 import { ArrowLeft, Phone, Mail, MapPin, Calendar, Edit, Plus, FileText, Upload, Image as ImageIcon, X, Eye } from 'lucide-react';
@@ -22,7 +22,7 @@ const toCamel = (row) => {
 export default function ClientProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { clients, loans, installments, payments, updateClient, addLoan, loading: contextLoading } = useApp();
+  const { clients = [], loans = [], installments = [], payments = [], updateClient, addLoan, loading: contextLoading } = useApp() || {};
   
   const [tab, setTab] = useState('overview');
   const [editing, setEditing] = useState(false);
@@ -36,27 +36,35 @@ export default function ClientProfile() {
 
   // Direct fetch fallback if deep linking or context reloading
   useEffect(() => {
-    if (contextClient || !id || contextLoading) return;
-    let active = true;
+    let isMounted = true;
+
+    if (contextClient || !id) {
+      setDirectLoading(false);
+      return;
+    }
+
+    setDirectLoading(true);
+
     async function fetchSingleClient() {
-      setDirectLoading(true);
       try {
         const { data, error } = await supabase.from('clients').select('*').eq('id', id).maybeSingle();
-        if (active && data && !error) {
+        if (isMounted && data && !error) {
           setDirectClient(toCamel(data));
         }
       } catch (err) {
         console.error('Error fetching single client directly:', err);
       } finally {
-        if (active) setDirectLoading(false);
+        if (isMounted) setDirectLoading(false);
       }
     }
+
     fetchSingleClient();
-    return () => { active = false; };
-  }, [id, contextClient, contextLoading]);
+    return () => { isMounted = false; };
+  }, [id, contextClient]);
 
   const client = contextClient || directClient;
-  const isLoading = contextLoading || directLoading;
+  const hasData = Boolean(client);
+  const isLoading = !hasData && (contextLoading || directLoading);
 
   // New Debit Form State
   const [debitForm, setDebitForm] = useState({
@@ -73,7 +81,7 @@ export default function ClientProfile() {
     notes: '',
   });
 
-  const [clientForm, setClientForm] = useState({ ...client });
+  const [clientForm, setClientForm] = useState({});
 
   useEffect(() => {
     if (client) {
@@ -82,7 +90,7 @@ export default function ClientProfile() {
   }, [client]);
 
   // Loading state render
-  if (isLoading && !client) {
+  if (isLoading) {
     return (
       <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s infinite', marginBottom: '12px' }}>⏳</div>
@@ -105,10 +113,10 @@ export default function ClientProfile() {
   }
 
   const clientId = client.id;
-  const clientLoans = loans.filter(l => String(l.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
+  const clientLoans = (loans || []).filter(l => String(l.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
   const activeLoans = clientLoans.filter(l => l.status === 'active');
-  const clientInst = installments.filter(i => String(i.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
-  const clientPayments = payments.filter(p => String(p.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
+  const clientInst = (installments || []).filter(i => String(i.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
+  const clientPayments = (payments || []).filter(p => String(p.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
 
   const totalEmprestado = clientLoans.reduce((s, l) => s + (l.principalAmount || 0), 0);
   const totalPago = clientInst.reduce((s, i) => s + (i.paidAmount || 0), 0);
@@ -119,19 +127,23 @@ export default function ClientProfile() {
   const status = getClientStatus(client, loans, installments);
 
   const handleSaveClient = async () => {
-    await updateClient(clientId, clientForm);
+    if (updateClient) {
+      await updateClient(clientId, clientForm);
+    }
     setEditing(false);
   };
 
   // Handle Document Upload
   const handleDocUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const updated = { ...clientForm, documentImage: reader.result };
         setClientForm(updated);
-        await updateClient(clientId, { documentImage: reader.result });
+        if (updateClient) {
+          await updateClient(clientId, { documentImage: reader.result });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -176,22 +188,24 @@ export default function ClientProfile() {
       return d.toISOString().split('T')[0];
     })();
 
-    await addLoan({
-      clientId: clientId,
-      title: debitForm.title || `Débito R$ ${parseFloat(debitForm.principalAmount).toLocaleString('pt-BR')}`,
-      principalAmount: debitPreview.principalAmount,
-      interestType: debitForm.interestType,
-      interestRate: parseFloat(debitForm.interestRate) || 0,
-      fixedInterestAmount: parseFloat(debitForm.fixedInterestAmount) || 0,
-      calculationMode: debitForm.calculationMode,
-      totalInterest: debitPreview.totalInterest,
-      totalAmount: debitPreview.totalAmount,
-      installmentCount: debitPreview.count,
-      periodicity: debitForm.periodicity,
-      startDate: debitForm.startDate,
-      firstDueDate: firstDue,
-      notes: debitForm.notes,
-    });
+    if (addLoan) {
+      await addLoan({
+        clientId: clientId,
+        title: debitForm.title || `Débito R$ ${parseFloat(debitForm.principalAmount).toLocaleString('pt-BR')}`,
+        principalAmount: debitPreview.principalAmount,
+        interestType: debitForm.interestType,
+        interestRate: parseFloat(debitForm.interestRate) || 0,
+        fixedInterestAmount: parseFloat(debitForm.fixedInterestAmount) || 0,
+        calculationMode: debitForm.calculationMode,
+        totalInterest: debitPreview.totalInterest,
+        totalAmount: debitPreview.totalAmount,
+        installmentCount: debitPreview.count,
+        periodicity: debitForm.periodicity,
+        startDate: debitForm.startDate,
+        firstDueDate: firstDue,
+        notes: debitForm.notes,
+      });
+    }
 
     setShowDebitModal(false);
     setDebitForm({

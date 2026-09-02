@@ -26,7 +26,7 @@ const toCamel = (row) => {
 export default function LoanDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { loans, clients, installments, settings, deleteLoan, loading: contextLoading } = useApp();
+  const { loans = [], clients = [], installments = [], settings = {}, deleteLoan, loading: contextLoading } = useApp() || {};
   const [copiedId, setCopiedId] = useState(null);
   const [directLoan, setDirectLoan] = useState(null);
   const [directLoading, setDirectLoading] = useState(false);
@@ -36,30 +36,38 @@ export default function LoanDetail() {
 
   // Direct fetch fallback if deep linking or context reloading
   useEffect(() => {
-    if (contextLoan || !id || contextLoading) return;
-    let active = true;
+    let isMounted = true;
+
+    if (contextLoan || !id) {
+      setDirectLoading(false);
+      return;
+    }
+
+    setDirectLoading(true);
+
     async function fetchSingleLoan() {
-      setDirectLoading(true);
       try {
         const { data, error } = await supabase.from('loans').select('*').eq('id', id).maybeSingle();
-        if (active && data && !error) {
+        if (isMounted && data && !error) {
           setDirectLoan(toCamel(data));
         }
       } catch (err) {
         console.error('Error fetching single loan directly:', err);
       } finally {
-        if (active) setDirectLoading(false);
+        if (isMounted) setDirectLoading(false);
       }
     }
+
     fetchSingleLoan();
-    return () => { active = false; };
-  }, [id, contextLoan, contextLoading]);
+    return () => { isMounted = false; };
+  }, [id, contextLoan]);
 
   const loan = contextLoan || directLoan;
-  const isLoading = contextLoading || directLoading;
+  const hasData = Boolean(loan);
+  const isLoading = !hasData && (contextLoading || directLoading);
 
   // Loading state render
-  if (isLoading && !loan) {
+  if (isLoading) {
     return (
       <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s infinite', marginBottom: '12px' }}>⏳</div>
@@ -81,8 +89,8 @@ export default function LoanDetail() {
     );
   }
 
-  const client = clients.find(c => String(c.id || '').toLowerCase() === String(loan.clientId || '').toLowerCase());
-  const insts = installments.filter(i => String(i.loanId || '').toLowerCase() === String(loan.id || '').toLowerCase()).sort((a, b) => a.number - b.number);
+  const client = (clients || []).find(c => String(c.id || '').toLowerCase() === String(loan.clientId || '').toLowerCase());
+  const insts = (installments || []).filter(i => String(i.loanId || '').toLowerCase() === String(loan.id || '').toLowerCase()).sort((a, b) => a.number - b.number);
   const totalPaid = insts.reduce((s, i) => s + (i.paidAmount || 0), 0);
   const saldoDevedor = (loan.totalAmount || 0) - totalPaid;
   const progress = loan.totalAmount > 0 ? (totalPaid / loan.totalAmount * 100) : 0;
@@ -202,7 +210,9 @@ export default function LoanDetail() {
                 title="Apagar Empréstimo"
                 onClick={() => {
                   if (window.confirm(`Tem certeza que deseja APAGAR o empréstimo "${loan.title}"?\n\nTodas as parcelas e pagamentos serão removidos permanentemente.`)) {
-                    deleteLoan(id).then(() => navigate('/emprestimos'));
+                    if (deleteLoan) {
+                      deleteLoan(id).then(() => navigate('/emprestimos'));
+                    }
                   }
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}

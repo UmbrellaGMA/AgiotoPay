@@ -30,7 +30,7 @@ const toCamel = (row) => {
 
 export default function Receipt() {
   const { id } = useParams(); // installment ID
-  const { installments, loans, clients, settings: globalSettings, saveSignature, loading: contextLoading } = useApp();
+  const { installments = [], loans = [], clients = [], settings: globalSettings = {}, saveSignature, loading: contextLoading } = useApp() || {};
   const canvasRef = useRef(null);
 
   const [directData, setDirectData] = useState(null);
@@ -41,19 +41,24 @@ export default function Receipt() {
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. Try finding records in global context
-  const contextInstallment = installments.find(i => String(i.id).toLowerCase() === String(id || '').toLowerCase());
-  const contextLoan = contextInstallment ? loans.find(l => String(l.id).toLowerCase() === String(contextInstallment.loanId || '').toLowerCase()) : null;
-  const contextClient = contextLoan ? clients.find(c => String(c.id).toLowerCase() === String(contextLoan.clientId || '').toLowerCase()) : null;
+  // 1. Try finding records in global context using case-insensitive comparison
+  const contextInstallment = installments.find(i => String(i.id || '').toLowerCase() === String(id || '').toLowerCase());
+  const contextLoan = contextInstallment ? loans.find(l => String(l.id || '').toLowerCase() === String(contextInstallment.loanId || '').toLowerCase()) : null;
+  const contextClient = contextLoan ? clients.find(c => String(c.id || '').toLowerCase() === String(contextLoan.clientId || '').toLowerCase()) : null;
 
-  // 2. Direct fetch fallback if unauthenticated public link or context missing
+  // 2. Direct fetch fallback if missing from context
   useEffect(() => {
-    let active = true;
-    async function loadDirectReceipt() {
-      if (contextInstallment && contextLoan && contextClient) return;
-      if (!id) return;
+    let isMounted = true;
 
-      setDirectLoading(true);
+    if (contextInstallment && contextLoan && contextClient) {
+      setDirectLoading(false);
+      return;
+    }
+    if (!id) return;
+
+    setDirectLoading(true);
+
+    async function loadDirectReceipt() {
       try {
         const { data: inst, error: instErr } = await supabase
           .from('installments')
@@ -62,7 +67,6 @@ export default function Receipt() {
           .maybeSingle();
 
         if (instErr || !inst) {
-          if (active) setDirectLoading(false);
           return;
         }
 
@@ -83,7 +87,7 @@ export default function Receipt() {
           .select('*')
           .limit(1);
 
-        if (active) {
+        if (isMounted) {
           setDirectData({
             installment: toCamel(inst),
             loan: loan ? toCamel(loan) : null,
@@ -94,21 +98,24 @@ export default function Receipt() {
       } catch (err) {
         console.error('Direct receipt fetch error:', err);
       } finally {
-        if (active) setDirectLoading(false);
+        if (isMounted) {
+          setDirectLoading(false);
+        }
       }
     }
 
     loadDirectReceipt();
 
-    return () => { active = false; };
+    return () => { isMounted = false; };
   }, [id, contextInstallment, contextLoan, contextClient]);
 
   const installment = contextInstallment || directData?.installment;
   const loan = contextLoan || directData?.loan;
   const client = contextClient || directData?.client;
-  const settings = globalSettings && Object.keys(globalSettings).length > 0 ? globalSettings : (directData?.settings || {});
+  const settings = (globalSettings && Object.keys(globalSettings).length > 0) ? globalSettings : (directData?.settings || {});
 
-  const isLoading = (contextLoading && !installment) || directLoading;
+  const hasData = Boolean(installment && loan && client);
+  const isLoading = !hasData && (contextLoading || directLoading);
 
   // Sync state if installment loads or has signature
   useEffect(() => {
@@ -138,8 +145,14 @@ export default function Receipt() {
 
   useEffect(() => {
     initCanvas();
+    const t1 = setTimeout(initCanvas, 100);
+    const t2 = setTimeout(initCanvas, 400);
     window.addEventListener('resize', initCanvas);
-    return () => window.removeEventListener('resize', initCanvas);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', initCanvas);
+    };
   }, [initCanvas, installment, signed]);
 
   const getPos = (e) => {
@@ -149,12 +162,10 @@ export default function Receipt() {
     let clientX = 0;
     let clientY = 0;
 
-    if (e.touches && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else if (e.changedTouches && e.changedTouches.length > 0) {
-      clientX = e.changedTouches[0].clientX;
-      clientY = e.changedTouches[0].clientY;
+    const touch = e.touches?.[0] || e.changedTouches?.[0];
+    if (touch) {
+      clientX = touch.clientX;
+      clientY = touch.clientY;
     } else {
       clientX = e.clientX;
       clientY = e.clientY;
@@ -177,6 +188,7 @@ export default function Receipt() {
 
   const draw = (e) => {
     if (!drawing || !canvasRef.current) return;
+    if (e.cancelable) e.preventDefault();
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e);
     ctx.lineTo(pos.x, pos.y);
@@ -184,23 +196,20 @@ export default function Receipt() {
   };
 
   const stopDraw = () => {
+    if (!drawing) return;
     setDrawing(false);
   };
 
   const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     setSigned(false);
     setSignatureData(null);
+    setTimeout(initCanvas, 50);
   };
 
   const confirmSignature = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Check if canvas is empty before confirming
     const ctx = canvas.getContext('2d');
     const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let hasSignature = false;
@@ -286,8 +295,8 @@ export default function Receipt() {
     );
   }
 
-  const saldo = installment.totalAmount - installment.paidAmount;
-  const isPaid = installment.paidAmount >= installment.totalAmount;
+  const saldo = (installment.totalAmount || 0) - (installment.paidAmount || 0);
+  const isPaid = (installment.paidAmount || 0) >= (installment.totalAmount || 0);
   const isInterestOnly = loan.calculationMode === 'interest_only_final_payoff';
   const now = new Date();
   const signedDateStr = installment.signedAt ? new Date(installment.signedAt).toLocaleDateString('pt-BR') : now.toLocaleDateString('pt-BR');
@@ -298,155 +307,123 @@ export default function Receipt() {
       <div className="receipt-container">
         {/* Actions bar — hidden on print */}
         <div className="receipt-actions no-print">
-          <button className="receipt-btn" onClick={copyLink}>
-            {copied ? '✅ Link Copiado!' : '🔗 Copiar Link do Recibo'}
+          <button className="receipt-btn secondary" onClick={copyLink}>
+            {copied ? '✅ Link Copiado!' : '🔗 Copiar Link'}
           </button>
           <button className="receipt-btn primary" onClick={handlePrint}>
-            🖨️ Imprimir / Salvar PDF (A4)
+            🖨️ Imprimir / Salvar PDF
           </button>
         </div>
 
-        {/* Receipt Card */}
+        {/* Printable Receipt Card */}
         <div className="receipt-card">
           {/* Header */}
           <div className="receipt-header">
-            <div className="receipt-header-text">
-              <Logo variant="full" size={38} />
-              <p style={{ marginTop: '4px', fontSize: '0.8rem', color: '#64748b' }}>{settings?.companyName || 'Sistema de Gerenciamento Financeiro'}</p>
+            <div className="receipt-header-brand">
+              <Logo size="medium" hideSubtitle={false} />
+              <div className="receipt-company-info mt-8">
+                <strong>{settings.companyName || 'AgiotoPay'}</strong>
+                {settings.adminName && <span>Resp.: {settings.adminName}</span>}
+              </div>
             </div>
-            <div className="receipt-badge-wrapper">
+            <div className="receipt-badge-wrap">
               <span className={`receipt-badge ${isPaid ? 'paid' : 'pending'}`}>
-                {isPaid ? 'QUITADA' : 'PENDENTE'}
+                {isPaid ? 'PAYMENT CONFIRMED / PAGO' : 'EM ABERTO'}
               </span>
-            </div>
-          </div>
-
-          <div className="receipt-divider" />
-
-          {/* Receipt Title */}
-          <div className="receipt-title-section">
-            <h2>RECIBO DE COBRANÇA</h2>
-            <p className="receipt-subtitle">Parcela {installment.number} de {loan.installmentCount}</p>
-            <p className="receipt-code">Código: #{(installment.id || '').slice(-8).toUpperCase()}</p>
-          </div>
-
-          <div className="receipt-divider" />
-
-          {/* Client Info */}
-          <div className="receipt-section">
-            <h3>Dados do Cliente</h3>
-            <div className="receipt-info-grid">
-              <div className="receipt-info-item">
-                <label>Nome Completo</label>
-                <span>{client.name}</span>
-              </div>
-              <div className="receipt-info-item">
-                <label>CPF / Documento</label>
-                <span>{client.cpf || '-'}</span>
-              </div>
-              <div className="receipt-info-item">
-                <label>Telefone / WhatsApp</label>
-                <span>{client.whatsapp || client.phone || '-'}</span>
-              </div>
-              <div className="receipt-info-item">
-                <label>E-mail</label>
-                <span>{client.email || '-'}</span>
+              <div className="receipt-number mt-8">
+                RECIBO Nº #{String(installment.id || '').slice(-8).toUpperCase()}
               </div>
             </div>
           </div>
 
           <div className="receipt-divider" />
 
-          {/* Loan Info */}
-          <div className="receipt-section">
-            <h3>Dados do Empréstimo</h3>
-            <div className="receipt-info-grid">
-              <div className="receipt-info-item">
-                <label>Título do Débito</label>
-                <span>{loan.title}</span>
+          {/* Client & Loan Details */}
+          <div className="receipt-grid">
+            <div className="receipt-section">
+              <h4 className="receipt-section-title">CLIENTE</h4>
+              <div className="receipt-field">
+                <label>Nome:</label>
+                <span>{client.name || '-'}</span>
               </div>
-              <div className="receipt-info-item">
-                <label>Capital Principal</label>
+              {client.cpf && (
+                <div className="receipt-field">
+                  <label>CPF:</label>
+                  <span>{client.cpf}</span>
+                </div>
+              )}
+              {client.phone && (
+                <div className="receipt-field">
+                  <label>Telefone:</label>
+                  <span>{client.phone}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="receipt-section">
+              <h4 className="receipt-section-title">DETALHES DO DÉBITO</h4>
+              <div className="receipt-field">
+                <label>Título / Contrato:</label>
+                <span>{loan.title || `Débito #${String(loan.id || '').slice(-6).toUpperCase()}`}</span>
+              </div>
+              <div className="receipt-field">
+                <label>Modalidade:</label>
+                <span>{isInterestOnly ? 'Juros Periódicos' : 'Amortizado'}</span>
+              </div>
+              <div className="receipt-field">
+                <label>Capital Principal:</label>
                 <span>{formatCurrency(loan.principalAmount)}</span>
               </div>
-              <div className="receipt-info-item">
-                <label>Taxa de Juros</label>
-                <span>{loan.interestRate}% por período</span>
-              </div>
-              <div className="receipt-info-item">
-                <label>Modalidade</label>
-                <span>{isInterestOnly ? 'Juros Periódicos + Quitação Final' : 'Amortização Tradicional'}</span>
-              </div>
-              <div className="receipt-info-item">
-                <label>Total de Parcelas</label>
-                <span>{loan.installmentCount}x</span>
-              </div>
-              <div className="receipt-info-item">
-                <label>Valor Total do Débito</label>
-                <span>{formatCurrency(loan.totalAmount)}</span>
-              </div>
             </div>
           </div>
 
           <div className="receipt-divider" />
 
-          {/* Installment Details */}
-          <div className="receipt-section">
-            <h3>Detalhes desta Parcela</h3>
-            <div className="receipt-highlight-grid">
-              <div className="receipt-highlight-card blue">
-                <label>Parcela Nº</label>
-                <span>{installment.number}/{loan.installmentCount}</span>
-              </div>
-              <div className="receipt-highlight-card yellow">
-                <label>Vencimento</label>
-                <span>{formatDate(installment.dueDate)}</span>
-              </div>
-              <div className="receipt-highlight-card purple">
-                <label>Capital</label>
-                <span>{formatCurrency(installment.principalAmount)}</span>
-              </div>
-              <div className="receipt-highlight-card orange">
-                <label>Juros</label>
-                <span>{formatCurrency(installment.interestAmount)}</span>
-              </div>
-              <div className="receipt-highlight-card accent">
-                <label>Valor Total</label>
-                <span className="receipt-total">{formatCurrency(installment.totalAmount)}</span>
-              </div>
-              <div className={`receipt-highlight-card ${isPaid ? 'green' : 'red'}`}>
-                <label>{isPaid ? 'Valor Pago' : 'Saldo Pendente'}</label>
-                <span>{isPaid ? formatCurrency(installment.paidAmount) : formatCurrency(saldo)}</span>
-              </div>
+          {/* Installment Summary */}
+          <div className="receipt-section mb-16">
+            <h4 className="receipt-section-title">PARCELA E VALORES</h4>
+            <div className="receipt-table-wrap">
+              <table className="receipt-table">
+                <thead>
+                  <tr>
+                    <th>Parcela</th>
+                    <th>Vencimento</th>
+                    <th>Juros</th>
+                    <th>Valor Parcela</th>
+                    <th>Valor Pago</th>
+                    <th>Saldo Restante</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>{installment.number} / {loan.installmentCount}</strong></td>
+                    <td>{formatDate(installment.dueDate)}</td>
+                    <td>{formatCurrency(installment.interestAmount)}</td>
+                    <td><strong>{formatCurrency(installment.totalAmount)}</strong></td>
+                    <td className="text-green"><strong>{formatCurrency(installment.paidAmount)}</strong></td>
+                    <td className="text-red"><strong>{formatCurrency(saldo)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {isPaid && installment.paidDate && (
-            <>
-              <div className="receipt-divider" />
-              <div className="receipt-section">
-                <h3>Confirmação de Pagamento</h3>
-                <div className="receipt-paid-info">
-                  <p>Pagamento registrado em <strong>{formatDate(installment.paidDate)}</strong></p>
-                  <p>Valor pago: <strong className="text-green">{formatCurrency(installment.paidAmount)}</strong></p>
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="receipt-divider" />
-
-          {/* Digital Signature */}
-          <div className="receipt-section">
-            <h3>Assinatura Digital do Cliente</h3>
-            <p className="receipt-sign-info no-print">
-              Ao assinar abaixo, o cliente confirma que está ciente dos valores, condições e vencimento desta parcela.
+          {/* Declaration Text */}
+          <div className="receipt-declaration">
+            <p>
+              Declaramos para os devidos fins que o(a) Sr(a). <strong>{client.name}</strong> efetuou o pagamento da quantia de{' '}
+              <strong>{formatCurrency(installment.paidAmount || 0)}</strong> referente à parcela{' '}
+              <strong>#{installment.number}</strong> do débito <strong>"{loan.title || 'Empréstimo'}"</strong>.
             </p>
+          </div>
 
+          {/* Signature Section */}
+          <div className="receipt-signature-section">
+            <h4 className="receipt-section-title">ASSINATURA DIGITAL DO CLIENTE</h4>
             {signed && signatureData ? (
-              <div className="receipt-signed-area">
+              <div className="receipt-signed-box">
                 <img src={signatureData} alt="Assinatura Digital" className="receipt-signature-img" />
-                <div className="receipt-signed-meta">
+                <div className="receipt-signature-meta">
                   <p>📌 Assinado digitalmente em {signedDateStr} às {signedTimeStr}</p>
                   <p>🔒 Assinatura registrada e vinculada ao recibo #{(installment.id || '').slice(-8).toUpperCase()}</p>
                 </div>
@@ -463,6 +440,7 @@ export default function Receipt() {
                 <canvas
                   ref={canvasRef}
                   className="receipt-canvas"
+                  style={{ touchAction: 'none' }}
                   onMouseDown={startDraw}
                   onMouseMove={draw}
                   onMouseUp={stopDraw}
