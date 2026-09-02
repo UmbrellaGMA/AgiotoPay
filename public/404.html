@@ -3,12 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <script>
-    // SPA 404 Fallback Redirect
-    window.location.replace('/');
+    // Single Page Application (SPA) 404 Route Preserver
+    var pathSegmentsToKeep = 0;
+    var l = window.location;
+    l.replace(
+      l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+      l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?p=' +
+      encodeURIComponent(l.pathname.slice(1) + l.search) +
+      (l.hash ? '&h=' + encodeURIComponent(l.hash) : '')
+    );
   </script>
   <title>AgiotoPay - Redirecionando...</title>
 </head>
 <body>
-  <p>Redirecionando para o sistema...</p>
+  <p>Redirecionando para o recibo...</p>
 </body>
 </html>

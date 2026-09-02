@@ -7,6 +7,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="AgiotoPay - Sistema de Gerenciamento Financeiro de Empréstimos. Controle clientes, parcelas, juros e pagamentos." />
     <title>AgiotoPay - Gerenciamento de Empréstimos</title>
+    <script>
+      // Single Page Application (SPA) redirect handler for static hosts
+      (function(l) {
+        if (l.search[1] === 'p') {
+          var decoded = l.search.slice(1).split('&').map(function(s) { 
+            return s.replace(/~and~/g, '&'); 
+          }).filter(function(s) {
+            return s.slice(0, 2) === 'p=';
+          })[0];
+          if (decoded) {
+            window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + decodeURIComponent(decoded.slice(2)) + l.hash
+            );
+          }
+        }
+      }(window.location));
+    </script>
   </head>
   <body>
     <div id="root"></div>
