@@ -21,14 +21,18 @@ export default function Header() {
   return (
     <header className="header">
       <div className="header-left">
-        <button className="menu-btn header-btn" onClick={() => setSidebarOpen(true)}>
+        <button className="menu-btn header-btn hide-desktop" onClick={() => setSidebarOpen(true)} title="Abrir Menu">
           <Menu size={18} />
         </button>
+        <div className="header-brand-mobile hide-desktop">
+          <div className="logo-sm">A</div>
+          <span>AGIOTOPAY</span>
+        </div>
         <div className="header-search">
           <Search size={16} />
           <input
             type="text"
-            placeholder="Pesquisar cliente, telefone, CPF..."
+            placeholder="Pesquisar..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={handleSearch}
@@ -41,7 +45,7 @@ export default function Header() {
         <button
           className="header-btn"
           onClick={toggleTheme}
-          title={theme === 'light' ? 'Mudar para Tema Escuro' : 'Mudar para Tema Claro'}
+          title={theme === 'light' ? 'Tema Escuro' : 'Tema Claro'}
         >
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>
@@ -53,35 +57,23 @@ export default function Header() {
         </button>
 
         {currentUser && (
-          <div className="header-user-profile" style={{ display: 'flex', alignItems: 'center', gap: 10, borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: 14 }}>
-            <div className="avatar" style={{ width: 34, height: 34, fontSize: '0.85rem', background: 'rgba(255,255,255,0.25)', color: '#fff', fontWeight: 700, border: '1px solid rgba(255,255,255,0.3)' }}>
+          <div className="header-user-profile">
+            <div className="avatar" title={currentUser.name}>
               {currentUser.name[0]}
             </div>
-            <div className="user-details hide-mobile" style={{ display: 'flex', flexDirection: 'column' }}>
-              <strong style={{ fontSize: '0.86rem', color: '#fff', lineHeight: 1.2 }}>{currentUser.name}</strong>
-              <small style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+            <div className="user-details hide-mobile">
+              <strong>{currentUser.name}</strong>
+              <small>
                 {currentUser.role === 'admin' && <Shield size={10} />}
                 {currentUser.role === 'admin' ? 'GESTOR PRINCIPAL' : 'OPERADOR'}
               </small>
             </div>
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn-logout-icon"
               onClick={handleLogout}
               title="Sair da Conta"
-              style={{
-                marginLeft: 4,
-                padding: '6px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: 'rgba(255, 255, 255, 0.16)',
-                borderColor: 'rgba(255, 255, 255, 0.25)',
-                color: '#fff',
-                fontWeight: 600
-              }}
             >
-              <LogOut size={14} />
-              <span className="hide-mobile">Sair</span>
+              <LogOut size={16} />
             </button>
           </div>
         )}

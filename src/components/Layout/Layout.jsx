@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import BottomNav from './BottomNav';
 
 export default function Layout() {
   return (
@@ -12,6 +13,8 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      <BottomNav />
     </div>
   );
 }
+
