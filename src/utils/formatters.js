@@ -10,13 +10,16 @@ export const formatCurrency = (value) => {
 
 export const formatDate = (dateStr) => {
   if (!dateStr) return '-';
-  const date = new Date(dateStr + 'T00:00:00');
+  const cleanStr = String(dateStr).split('T')[0];
+  const date = new Date(cleanStr + 'T00:00:00');
+  if (isNaN(date.getTime())) return String(dateStr);
   return date.toLocaleDateString('pt-BR');
 };
 
 export const formatDateTime = (dateStr) => {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return String(dateStr);
   return date.toLocaleString('pt-BR');
 };
 
@@ -42,19 +45,25 @@ export const formatCPF = (cpf) => {
 };
 
 export const getDaysUntilDue = (dueDate) => {
+  if (!dueDate) return 0;
+  const cleanStr = String(dueDate).split('T')[0];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const due = new Date(dueDate + 'T00:00:00');
+  const due = new Date(cleanStr + 'T00:00:00');
+  if (isNaN(due.getTime())) return 0;
   due.setHours(0, 0, 0, 0);
   const diffTime = due.getTime() - today.getTime();
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
 export const getInstallmentStatus = (installment) => {
+  if (!installment) return 'open';
   if (installment.status === 'renegotiated') return 'renegotiated';
-  if (installment.paidAmount >= installment.totalAmount) return 'paid';
-  if (installment.paidAmount > 0 && installment.paidAmount < installment.totalAmount) return 'partial';
-  
+  const paid = installment.paidAmount || 0;
+  const total = installment.totalAmount || 0;
+  if (paid >= total && total > 0) return 'paid';
+  if (paid > 0 && paid < total) return 'partial';
+
   const days = getDaysUntilDue(installment.dueDate);
   if (days < 0) return 'overdue';
   if (days === 0) return 'due_today';
@@ -88,25 +97,26 @@ export const getStatusColor = (status) => {
   return colors[status] || '#6b7280';
 };
 
-export const getClientStatus = (client, loans, installments) => {
-  const clientLoans = loans.filter(l => l.clientId === client.id && l.status === 'active');
+export const getClientStatus = (client, loans = [], installments = []) => {
+  if (!client || !client.id) return 'sem_emprestimos';
+  const clientLoans = (loans || []).filter(l => l && (l.clientId === client.id || String(l.clientId || '').toLowerCase() === String(client.id).toLowerCase()) && l.status === 'active');
   if (clientLoans.length === 0) {
-    const hasQuitado = loans.some(l => l.clientId === client.id && l.status === 'completed');
+    const hasQuitado = (loans || []).some(l => l && (l.clientId === client.id || String(l.clientId || '').toLowerCase() === String(client.id).toLowerCase()) && l.status === 'completed');
     return hasQuitado ? 'quitado' : 'sem_emprestimos';
   }
 
-  const clientInstallments = installments.filter(i => 
-    clientLoans.some(l => l.id === i.loanId) && getInstallmentStatus(i) !== 'paid'
+  const clientInstallments = (installments || []).filter(i =>
+    i && clientLoans.some(l => String(l.id || '').toLowerCase() === String(i.loanId || '').toLowerCase()) && getInstallmentStatus(i) !== 'paid'
   );
 
-  const hasOverdue = clientInstallments.some(i => getInstallmentStatus(i) === 'overdue');
+  const overdueInsts = clientInstallments.filter(i => getInstallmentStatus(i) === 'overdue');
+  const hasOverdue = overdueInsts.length > 0;
   const hasDueToday = clientInstallments.some(i => getInstallmentStatus(i) === 'due_today');
   const hasNearDue = clientInstallments.some(i => getInstallmentStatus(i) === 'near_due');
 
   if (hasOverdue) {
-    const maxDays = Math.max(...clientInstallments
-      .filter(i => getInstallmentStatus(i) === 'overdue')
-      .map(i => Math.abs(getDaysUntilDue(i.dueDate))));
+    const overdueDays = overdueInsts.map(i => Math.abs(getDaysUntilDue(i.dueDate)));
+    const maxDays = overdueDays.length > 0 ? Math.max(...overdueDays) : 0;
     if (maxDays > 30) return 'critico';
     return 'atrasado';
   }

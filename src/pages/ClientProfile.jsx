@@ -1,19 +1,62 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate, formatPhone, formatCPF, getInstallmentStatus, getStatusLabel, getClientStatus, getClientStatusLabel, getClientStatusColor } from '../utils/formatters';
 import { ArrowLeft, Phone, Mail, MapPin, Calendar, Edit, Plus, FileText, Upload, Image as ImageIcon, X, Eye } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+
+// Helper: convert snake_case DB row to camelCase JS object
+const toCamel = (row) => {
+  if (!row) return row;
+  const map = {
+    birth_date: 'birthDate', document_image: 'documentImage', created_at: 'createdAt',
+    user_id: 'userId',
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[map[k] || k] = v;
+  }
+  return out;
+};
 
 export default function ClientProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { clients, loans, installments, payments, updateClient, addLoan } = useApp();
+  const { clients, loans, installments, payments, updateClient, addLoan, loading: contextLoading } = useApp();
+  
   const [tab, setTab] = useState('overview');
   const [editing, setEditing] = useState(false);
   const [showDebitModal, setShowDebitModal] = useState(false);
   const [showDocZoom, setShowDocZoom] = useState(false);
+  const [directClient, setDirectClient] = useState(null);
+  const [directLoading, setDirectLoading] = useState(false);
 
-  const client = clients.find(c => c.id === id);
+  // Match in context using case-insensitive ID
+  const contextClient = clients.find(c => String(c.id || '').toLowerCase() === String(id || '').toLowerCase());
+
+  // Direct fetch fallback if deep linking or context reloading
+  useEffect(() => {
+    if (contextClient || !id || contextLoading) return;
+    let active = true;
+    async function fetchSingleClient() {
+      setDirectLoading(true);
+      try {
+        const { data, error } = await supabase.from('clients').select('*').eq('id', id).maybeSingle();
+        if (active && data && !error) {
+          setDirectClient(toCamel(data));
+        }
+      } catch (err) {
+        console.error('Error fetching single client directly:', err);
+      } finally {
+        if (active) setDirectLoading(false);
+      }
+    }
+    fetchSingleClient();
+    return () => { active = false; };
+  }, [id, contextClient, contextLoading]);
+
+  const client = contextClient || directClient;
+  const isLoading = contextLoading || directLoading;
 
   // New Debit Form State
   const [debitForm, setDebitForm] = useState({
@@ -22,7 +65,7 @@ export default function ClientProfile() {
     interestType: 'percentage',
     interestRate: '30',
     fixedInterestAmount: '',
-    calculationMode: 'interest_only_final_payoff', // default to requested mode or amortized
+    calculationMode: 'interest_only_final_payoff',
     installmentCount: '3',
     periodicity: 'monthly',
     startDate: new Date().toISOString().split('T')[0],
@@ -38,23 +81,45 @@ export default function ClientProfile() {
     }
   }, [client]);
 
-  if (!client) return <div className="empty-state"><h3>Cliente não encontrado</h3></div>;
+  // Loading state render
+  if (isLoading && !client) {
+    return (
+      <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s infinite', marginBottom: '12px' }}>⏳</div>
+        <h3>Carregando dados do cliente...</h3>
+        <p className="text-muted">Aguarde enquanto os registros são atualizados.</p>
+      </div>
+    );
+  }
 
-  const clientLoans = loans.filter(l => l.clientId === id);
+  // Not found render
+  if (!client) {
+    return (
+      <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>👤</div>
+        <h3>Cliente não encontrado</h3>
+        <p className="text-muted" style={{ marginBottom: '16px' }}>O cliente solicitado não existe ou foi removido.</p>
+        <button className="btn btn-primary" onClick={() => navigate('/clientes')}>Voltar para Lista de Clientes</button>
+      </div>
+    );
+  }
+
+  const clientId = client.id;
+  const clientLoans = loans.filter(l => String(l.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
   const activeLoans = clientLoans.filter(l => l.status === 'active');
-  const clientInst = installments.filter(i => i.clientId === id);
-  const clientPayments = payments.filter(p => p.clientId === id);
+  const clientInst = installments.filter(i => String(i.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
+  const clientPayments = payments.filter(p => String(p.clientId || '').toLowerCase() === String(clientId || '').toLowerCase());
 
-  const totalEmprestado = clientLoans.reduce((s, l) => s + l.principalAmount, 0);
-  const totalPago = clientInst.reduce((s, i) => s + i.paidAmount, 0);
-  const totalAberto = activeLoans.reduce((s, l) => s + l.totalAmount, 0) - clientInst.filter(i => activeLoans.some(l => l.id === i.loanId)).reduce((s, i) => s + i.paidAmount, 0);
-  const totalJuros = clientLoans.reduce((s, l) => s + l.totalInterest, 0);
-  const pendentes = clientInst.filter(i => activeLoans.some(l => l.id === i.loanId) && i.paidAmount < i.totalAmount).length;
+  const totalEmprestado = clientLoans.reduce((s, l) => s + (l.principalAmount || 0), 0);
+  const totalPago = clientInst.reduce((s, i) => s + (i.paidAmount || 0), 0);
+  const totalAberto = activeLoans.reduce((s, l) => s + (l.totalAmount || 0), 0) - clientInst.filter(i => activeLoans.some(l => l.id === i.loanId)).reduce((s, i) => s + (i.paidAmount || 0), 0);
+  const totalJuros = clientLoans.reduce((s, l) => s + (l.totalInterest || 0), 0);
+  const pendentes = clientInst.filter(i => activeLoans.some(l => l.id === i.loanId) && (i.paidAmount || 0) < (i.totalAmount || 0)).length;
   const atrasadas = clientInst.filter(i => activeLoans.some(l => l.id === i.loanId) && getInstallmentStatus(i) === 'overdue').length;
   const status = getClientStatus(client, loans, installments);
 
   const handleSaveClient = async () => {
-    await updateClient(id, clientForm);
+    await updateClient(clientId, clientForm);
     setEditing(false);
   };
 
@@ -66,7 +131,7 @@ export default function ClientProfile() {
       reader.onloadend = async () => {
         const updated = { ...clientForm, documentImage: reader.result };
         setClientForm(updated);
-        await updateClient(id, { documentImage: reader.result });
+        await updateClient(clientId, { documentImage: reader.result });
       };
       reader.readAsDataURL(file);
     }
@@ -80,14 +145,14 @@ export default function ClientProfile() {
     let totalInterest = 0;
 
     if (debitForm.interestType === 'percentage') {
-      totalInterest = p * (rate / 100) * count; // Interest over total periods
+      totalInterest = p * (rate / 100) * count;
     } else {
       totalInterest = (parseFloat(debitForm.fixedInterestAmount) || 0) * count;
     }
 
     const isInterestOnly = debitForm.calculationMode === 'interest_only_final_payoff';
     const periodicInterest = totalInterest / count;
-    const totalAmount = isInterestOnly ? (p + totalInterest) : (p + totalInterest);
+    const totalAmount = p + totalInterest;
     const finalPayoff = isInterestOnly ? (periodicInterest + p) : (totalAmount / count);
 
     return {
@@ -112,7 +177,7 @@ export default function ClientProfile() {
     })();
 
     await addLoan({
-      clientId: id,
+      clientId: clientId,
       title: debitForm.title || `Débito R$ ${parseFloat(debitForm.principalAmount).toLocaleString('pt-BR')}`,
       principalAmount: debitPreview.principalAmount,
       interestType: debitForm.interestType,
@@ -167,23 +232,23 @@ export default function ClientProfile() {
           {editing ? (
             <div className="mt-16">
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Nome Completo</label><input className="form-input" value={clientForm.name} onChange={e => setClientForm({ ...clientForm, name: e.target.value })} /></div>
-                <div className="form-group"><label className="form-label">CPF / Documento</label><input className="form-input" value={clientForm.cpf} onChange={e => setClientForm({ ...clientForm, cpf: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">Nome Completo</label><input className="form-input" value={clientForm.name || ''} onChange={e => setClientForm({ ...clientForm, name: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">CPF / Documento</label><input className="form-input" value={clientForm.cpf || ''} onChange={e => setClientForm({ ...clientForm, cpf: e.target.value })} /></div>
               </div>
               <div className="form-row-3">
-                <div className="form-group"><label className="form-label">Telefone</label><input className="form-input" value={clientForm.phone} onChange={e => setClientForm({ ...clientForm, phone: e.target.value })} /></div>
-                <div className="form-group"><label className="form-label">WhatsApp</label><input className="form-input" value={clientForm.whatsapp} onChange={e => setClientForm({ ...clientForm, whatsapp: e.target.value })} /></div>
-                <div className="form-group"><label className="form-label">E-mail</label><input className="form-input" value={clientForm.email} onChange={e => setClientForm({ ...clientForm, email: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">Telefone</label><input className="form-input" value={clientForm.phone || ''} onChange={e => setClientForm({ ...clientForm, phone: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">WhatsApp</label><input className="form-input" value={clientForm.whatsapp || ''} onChange={e => setClientForm({ ...clientForm, whatsapp: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">E-mail</label><input className="form-input" value={clientForm.email || ''} onChange={e => setClientForm({ ...clientForm, email: e.target.value })} /></div>
               </div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Endereço</label><input className="form-input" value={clientForm.address} onChange={e => setClientForm({ ...clientForm, address: e.target.value })} /></div>
-                <div className="form-group"><label className="form-label">Cidade/Estado</label><input className="form-input" value={`${clientForm.city}`} onChange={e => setClientForm({ ...clientForm, city: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">Endereço</label><input className="form-input" value={clientForm.address || ''} onChange={e => setClientForm({ ...clientForm, address: e.target.value })} /></div>
+                <div className="form-group"><label className="form-label">Cidade</label><input className="form-input" value={clientForm.city || ''} onChange={e => setClientForm({ ...clientForm, city: e.target.value })} /></div>
               </div>
               <div className="form-group">
                 <label className="form-label">Anexar Documento (Foto/RG/CNH)</label>
                 <input type="file" accept="image/*" className="form-input" onChange={handleDocUpload} />
               </div>
-              <div className="form-group"><label className="form-label">Observações Internas</label><textarea className="form-textarea" value={clientForm.notes} onChange={e => setClientForm({ ...clientForm, notes: e.target.value })} /></div>
+              <div className="form-group"><label className="form-label">Observações Internas</label><textarea className="form-textarea" value={clientForm.notes || ''} onChange={e => setClientForm({ ...clientForm, notes: e.target.value })} /></div>
               <div className="flex gap-8"><button className="btn btn-primary" onClick={handleSaveClient}>Salvar</button><button className="btn btn-secondary" onClick={() => setEditing(false)}>Cancelar</button></div>
             </div>
           ) : (
@@ -193,9 +258,9 @@ export default function ClientProfile() {
               <div className="profile-info-item"><label>WhatsApp</label><span>{formatPhone(client.whatsapp)}</span></div>
               <div className="profile-info-item"><label>E-mail</label><span>{client.email || '-'}</span></div>
               <div className="profile-info-item"><label>Endereço</label><span>{client.address || '-'}</span></div>
-              <div className="profile-info-item"><label>Cidade/Estado</label><span>{client.city} - {client.state}</span></div>
+              <div className="profile-info-item"><label>Cidade/Estado</label><span>{client.city || '-'} {client.state ? `- ${client.state}` : ''}</span></div>
               <div className="profile-info-item"><label>Nascimento</label><span>{client.birthDate ? formatDate(client.birthDate) : '-'}</span></div>
-              <div className="profile-info-item"><label>Cadastro</label><span>{formatDate(client.createdAt?.split('T')[0])}</span></div>
+              <div className="profile-info-item"><label>Cadastro</label><span>{formatDate(client.createdAt)}</span></div>
             </div>
           )}
         </div>
@@ -203,7 +268,7 @@ export default function ClientProfile() {
 
       {/* Document Image Section */}
       {client.documentImage && (
-        <div className="stat-card mb-24" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+        <div className="stat-card mb-24" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           <div className="flex-between">
             <div className="flex align-center gap-8">
               <ImageIcon size={18} color="var(--accent)" />
@@ -212,7 +277,7 @@ export default function ClientProfile() {
             <button className="btn btn-secondary btn-sm" onClick={() => setShowDocZoom(true)}><Eye size={14} /> Visualizar Documento</button>
           </div>
           <div className="mt-12" style={{ cursor: 'pointer' }} onClick={() => setShowDocZoom(true)}>
-            <img src={client.documentImage} alt="Documento do Cliente" style={{ maxHeight: 120, borderRadius: 8, border: '1px solid var(--border-color)', objectFit: 'cover' }} />
+            <img src={client.documentImage} alt="Documento do Cliente" style={{ maxHeight: 120, borderRadius: 8, border: '1px solid var(--border)', objectFit: 'cover' }} />
           </div>
         </div>
       )}
@@ -284,7 +349,7 @@ export default function ClientProfile() {
                       <td>{formatCurrency(i.interestAmount)}</td>
                       <td>{formatCurrency(i.totalAmount)}</td>
                       <td className="text-green">{formatCurrency(i.paidAmount)}</td>
-                      <td className="text-red">{formatCurrency(i.totalAmount - i.paidAmount)}</td>
+                      <td className="text-red">{formatCurrency(i.totalAmount - (i.paidAmount || 0))}</td>
                       <td><span className={`badge-status ${statusColors[st] || 'gray'}`}>{getStatusLabel(st)}</span></td>
                     </tr>
                   );

@@ -1,25 +1,116 @@
 import { useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { useRef, useState, useEffect } from 'react';
-
+import { useRef, useState, useEffect, useCallback } from 'react';
+import { supabase } from '../utils/supabase';
 import Logo from '../components/Common/Logo';
+
+// Helper: convert snake_case DB row to camelCase JS object
+const toCamel = (row) => {
+  if (!row) return row;
+  const map = {
+    client_id: 'clientId', loan_id: 'loanId', principal_amount: 'principalAmount',
+    interest_type: 'interestType', interest_rate: 'interestRate',
+    fixed_interest_amount: 'fixedInterestAmount', total_interest: 'totalInterest',
+    total_amount: 'totalAmount', installment_count: 'installmentCount',
+    start_date: 'startDate', first_due_date: 'firstDueDate', created_at: 'createdAt',
+    due_date: 'dueDate', paid_amount: 'paidAmount', paid_date: 'paidDate',
+    interest_amount: 'interestAmount', installment_ids: 'installmentIds',
+    related_id: 'relatedId', calculation_mode: 'calculationMode',
+    signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName',
+    date_format: 'dateFormat', alert_days: 'alertDays', payment_methods: 'paymentMethods',
+    birth_date: 'birthDate', document_image: 'documentImage',
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[map[k] || k] = v;
+  }
+  return out;
+};
 
 export default function Receipt() {
   const { id } = useParams(); // installment ID
-  const { installments, loans, clients, settings, saveSignature, loading } = useApp();
+  const { installments, loans, clients, settings: globalSettings, saveSignature, loading: contextLoading } = useApp();
   const canvasRef = useRef(null);
 
-  const installment = installments.find(i => i.id === id);
-  const loan = installment ? loans.find(l => l.id === installment.loanId) : null;
-  const client = loan ? clients.find(c => c.id === loan.clientId) : null;
-
+  const [directData, setDirectData] = useState(null);
+  const [directLoading, setDirectLoading] = useState(false);
   const [signed, setSigned] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [signatureData, setSignatureData] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Sync state if installment loads or changes
+  // 1. Try finding records in global context
+  const contextInstallment = installments.find(i => String(i.id).toLowerCase() === String(id || '').toLowerCase());
+  const contextLoan = contextInstallment ? loans.find(l => String(l.id).toLowerCase() === String(contextInstallment.loanId || '').toLowerCase()) : null;
+  const contextClient = contextLoan ? clients.find(c => String(c.id).toLowerCase() === String(contextLoan.clientId || '').toLowerCase()) : null;
+
+  // 2. Direct fetch fallback if unauthenticated public link or context missing
+  useEffect(() => {
+    let active = true;
+    async function loadDirectReceipt() {
+      if (contextInstallment && contextLoan && contextClient) return;
+      if (!id) return;
+
+      setDirectLoading(true);
+      try {
+        const { data: inst, error: instErr } = await supabase
+          .from('installments')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (instErr || !inst) {
+          if (active) setDirectLoading(false);
+          return;
+        }
+
+        const { data: loan } = await supabase
+          .from('loans')
+          .select('*')
+          .eq('id', inst.loan_id)
+          .maybeSingle();
+
+        const { data: client } = loan ? await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', loan.client_id)
+          .maybeSingle() : { data: null };
+
+        const { data: settingsArr } = await supabase
+          .from('settings')
+          .select('*')
+          .limit(1);
+
+        if (active) {
+          setDirectData({
+            installment: toCamel(inst),
+            loan: loan ? toCamel(loan) : null,
+            client: client ? toCamel(client) : null,
+            settings: settingsArr?.[0] ? toCamel(settingsArr[0]) : {},
+          });
+        }
+      } catch (err) {
+        console.error('Direct receipt fetch error:', err);
+      } finally {
+        if (active) setDirectLoading(false);
+      }
+    }
+
+    loadDirectReceipt();
+
+    return () => { active = false; };
+  }, [id, contextInstallment, contextLoan, contextClient]);
+
+  const installment = contextInstallment || directData?.installment;
+  const loan = contextLoan || directData?.loan;
+  const client = contextClient || directData?.client;
+  const settings = globalSettings && Object.keys(globalSettings).length > 0 ? globalSettings : (directData?.settings || {});
+
+  const isLoading = (contextLoading && !installment) || directLoading;
+
+  // Sync state if installment loads or has signature
   useEffect(() => {
     if (installment?.signature) {
       setSigned(true);
@@ -27,32 +118,55 @@ export default function Receipt() {
     }
   }, [installment]);
 
-  // Canvas setup
-  useEffect(() => {
+  // Setup Canvas
+  const initCanvas = useCallback(() => {
     if (signed || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
+    if (!rect.width || !rect.height) return;
+
+    const dpr = window.devicePixelRatio || 2;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2.5;
-  }, [installment, signed]);
+  }, [signed]);
+
+  useEffect(() => {
+    initCanvas();
+    window.addEventListener('resize', initCanvas);
+    return () => window.removeEventListener('resize', initCanvas);
+  }, [initCanvas, installment, signed]);
 
   const getPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    let clientX = 0;
+    let clientY = 0;
+
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
   };
 
   const startDraw = (e) => {
-    e.preventDefault();
     if (!canvasRef.current) return;
     setDrawing(true);
     const ctx = canvasRef.current.getContext('2d');
@@ -63,7 +177,6 @@ export default function Receipt() {
 
   const draw = (e) => {
     if (!drawing || !canvasRef.current) return;
-    e.preventDefault();
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e);
     ctx.lineTo(pos.x, pos.y);
@@ -83,14 +196,53 @@ export default function Receipt() {
     setSignatureData(null);
   };
 
-  const confirmSignature = () => {
+  const confirmSignature = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Check if canvas is empty before confirming
+    const ctx = canvas.getContext('2d');
+    const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let hasSignature = false;
+    for (let i = 3; i < pixelData.length; i += 4) {
+      if (pixelData[i] > 0) {
+        hasSignature = true;
+        break;
+      }
+    }
+
+    if (!hasSignature) {
+      alert('Por favor, faça sua assinatura no quadro antes de confirmar.');
+      return;
+    }
+
     const data = canvas.toDataURL('image/png');
+    setIsSaving(true);
     setSignatureData(data);
     setSigned(true);
-    if (installment) {
-      saveSignature(installment.id, data);
+
+    try {
+      const signedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('installments')
+        .update({ signature: data, signed_at: signedAt })
+        .eq('id', installment.id);
+
+      if (error) {
+        console.error('Error saving signature:', error);
+        alert('Erro ao salvar assinatura no banco de dados: ' + error.message);
+        setSigned(false);
+      } else {
+        if (saveSignature) {
+          saveSignature(installment.id, data);
+        }
+        alert('Assinatura registrada e salva com sucesso!');
+      }
+    } catch (err) {
+      console.error('Error confirming signature:', err);
+      alert('Erro ao processar assinatura.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -104,21 +256,22 @@ export default function Receipt() {
     window.print();
   };
 
-  // Show loading while Supabase data loads
-  if (loading) {
+  // Loading view
+  if (isLoading) {
     return (
       <div className="receipt-page">
         <div className="receipt-container">
           <div className="receipt-not-found">
             <div className="receipt-not-found-icon" style={{ animation: 'pulse 1.5s infinite' }}>⏳</div>
             <h2>Carregando recibo...</h2>
-            <p>Aguarde enquanto buscamos os dados.</p>
+            <p>Aguarde enquanto buscamos os dados no sistema.</p>
           </div>
         </div>
       </div>
     );
   }
 
+  // Not found view
   if (!installment || !loan || !client) {
     return (
       <div className="receipt-page">
@@ -297,6 +450,13 @@ export default function Receipt() {
                   <p>📌 Assinado digitalmente em {signedDateStr} às {signedTimeStr}</p>
                   <p>🔒 Assinatura registrada e vinculada ao recibo #{(installment.id || '').slice(-8).toUpperCase()}</p>
                 </div>
+                <button
+                  className="receipt-btn secondary no-print mt-12"
+                  onClick={clearSignature}
+                  style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                >
+                  ✏️ Refazer Assinatura
+                </button>
               </div>
             ) : (
               <div className="receipt-signature-box">
@@ -313,8 +473,12 @@ export default function Receipt() {
                 />
                 <p className="receipt-canvas-hint no-print">Assine com o mouse ou toque na tela</p>
                 <div className="receipt-sign-actions no-print">
-                  <button className="receipt-btn secondary" onClick={clearSignature}>🗑️ Limpar</button>
-                  <button className="receipt-btn primary" onClick={confirmSignature}>💾 Confirmar e Salvar Assinatura</button>
+                  <button className="receipt-btn secondary" onClick={clearSignature} disabled={isSaving}>
+                    🗑️ Limpar
+                  </button>
+                  <button className="receipt-btn primary" onClick={confirmSignature} disabled={isSaving}>
+                    {isSaving ? '⏳ Salvando...' : '💾 Confirmar e Salvar Assinatura'}
+                  </button>
                 </div>
               </div>
             )}

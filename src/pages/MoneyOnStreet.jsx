@@ -5,26 +5,34 @@ import { formatCurrency, formatDate, getInstallmentStatus, getDaysUntilDue } fro
 import { MapPin } from 'lucide-react';
 
 export default function MoneyOnStreet() {
-  const { loans, clients, installments } = useApp();
+  const { loans, clients, installments, loading } = useApp();
   const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
 
   const data = useMemo(() => {
-    const activeLoans = loans.filter(l => l.status === 'active');
+    const activeLoans = (loans || []).filter(l => l.status === 'active');
     return activeLoans.map(l => {
-      const client = clients.find(c => c.id === l.clientId);
-      const insts = installments.filter(i => i.loanId === l.id);
-      const paid = insts.reduce((s, i) => s + i.paidAmount, 0);
-      const saldo = l.totalAmount - paid;
+      const client = (clients || []).find(c => String(c.id || '').toLowerCase() === String(l.clientId || '').toLowerCase());
+      const insts = (installments || []).filter(i => String(i.loanId || '').toLowerCase() === String(l.id || '').toLowerCase());
+      const paid = insts.reduce((s, i) => s + (i.paidAmount || 0), 0);
+      const saldo = (l.totalAmount || 0) - paid;
       const overdueInsts = insts.filter(i => getInstallmentStatus(i) === 'overdue');
-      const nextDue = insts.filter(i => i.paidAmount < i.totalAmount).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
-      const maxOverdueDays = overdueInsts.length > 0 ? Math.max(...overdueInsts.map(i => Math.abs(getDaysUntilDue(i.dueDate)))) : 0;
+      const pendingInsts = insts.filter(i => (i.paidAmount || 0) < (i.totalAmount || 0));
+      const sortedPending = [...pendingInsts].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+      const nextDue = sortedPending[0];
+      const overdueDaysList = overdueInsts.map(i => Math.abs(getDaysUntilDue(i.dueDate)));
+      const maxOverdueDays = overdueDaysList.length > 0 ? Math.max(...overdueDaysList) : 0;
 
       return {
-        ...l, clientName: client?.name || '-', clientId: l.clientId,
-        paid, saldo, overdueCount: overdueInsts.length, maxOverdueDays,
+        ...l,
+        clientName: client?.name || '-',
+        clientId: l.clientId,
+        paid,
+        saldo,
+        overdueCount: overdueInsts.length,
+        maxOverdueDays,
         nextDueDate: nextDue?.dueDate || null,
-        status: overdueInsts.length > 0 ? 'overdue' : nextDue && getDaysUntilDue(nextDue.dueDate) <= 3 ? 'near_due' : 'ok',
+        status: overdueInsts.length > 0 ? 'overdue' : (nextDue && getDaysUntilDue(nextDue.dueDate) <= 3) ? 'near_due' : 'ok',
       };
     });
   }, [loans, clients, installments]);
@@ -39,6 +47,15 @@ export default function MoneyOnStreet() {
     else if (filter === 'high_value') r = [...r].sort((a, b) => b.saldo - a.saldo);
     return r;
   }, [data, filter]);
+
+  if (loading && data.length === 0) {
+    return (
+      <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s infinite', marginBottom: '12px' }}>⏳</div>
+        <h3>Carregando valores...</h3>
+      </div>
+    );
+  }
 
   return (
     <>

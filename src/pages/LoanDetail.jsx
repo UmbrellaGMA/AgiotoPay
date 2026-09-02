@@ -2,21 +2,89 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate, getInstallmentStatus, getStatusLabel, getDaysUntilDue } from '../utils/formatters';
 import { ArrowLeft, Info, MessageCircle, FileText, Link2, Copy, Check, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+
+// Helper: convert snake_case DB row to camelCase JS object
+const toCamel = (row) => {
+  if (!row) return row;
+  const map = {
+    client_id: 'clientId', principal_amount: 'principalAmount',
+    interest_type: 'interestType', interest_rate: 'interestRate',
+    fixed_interest_amount: 'fixedInterestAmount', total_interest: 'totalInterest',
+    total_amount: 'totalAmount', installment_count: 'installmentCount',
+    start_date: 'startDate', first_due_date: 'firstDueDate', created_at: 'createdAt',
+    calculation_mode: 'calculationMode', user_id: 'userId',
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[map[k] || k] = v;
+  }
+  return out;
+};
 
 export default function LoanDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { loans, clients, installments, settings, deleteLoan } = useApp();
+  const { loans, clients, installments, settings, deleteLoan, loading: contextLoading } = useApp();
   const [copiedId, setCopiedId] = useState(null);
+  const [directLoan, setDirectLoan] = useState(null);
+  const [directLoading, setDirectLoading] = useState(false);
 
-  const loan = loans.find(l => l.id === id);
-  if (!loan) return <div className="empty-state"><h3>Empréstimo / Débito não encontrado</h3></div>;
+  // Match in context using case-insensitive ID
+  const contextLoan = loans.find(l => String(l.id || '').toLowerCase() === String(id || '').toLowerCase());
 
-  const client = clients.find(c => c.id === loan.clientId);
-  const insts = installments.filter(i => i.loanId === id).sort((a, b) => a.number - b.number);
-  const totalPaid = insts.reduce((s, i) => s + i.paidAmount, 0);
-  const saldoDevedor = loan.totalAmount - totalPaid;
+  // Direct fetch fallback if deep linking or context reloading
+  useEffect(() => {
+    if (contextLoan || !id || contextLoading) return;
+    let active = true;
+    async function fetchSingleLoan() {
+      setDirectLoading(true);
+      try {
+        const { data, error } = await supabase.from('loans').select('*').eq('id', id).maybeSingle();
+        if (active && data && !error) {
+          setDirectLoan(toCamel(data));
+        }
+      } catch (err) {
+        console.error('Error fetching single loan directly:', err);
+      } finally {
+        if (active) setDirectLoading(false);
+      }
+    }
+    fetchSingleLoan();
+    return () => { active = false; };
+  }, [id, contextLoan, contextLoading]);
+
+  const loan = contextLoan || directLoan;
+  const isLoading = contextLoading || directLoading;
+
+  // Loading state render
+  if (isLoading && !loan) {
+    return (
+      <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s infinite', marginBottom: '12px' }}>⏳</div>
+        <h3>Carregando detalhes do empréstimo...</h3>
+        <p className="text-muted">Aguarde enquanto os registros são atualizados.</p>
+      </div>
+    );
+  }
+
+  // Not found render
+  if (!loan) {
+    return (
+      <div className="empty-state" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📄</div>
+        <h3>Empréstimo / Débito não encontrado</h3>
+        <p className="text-muted" style={{ marginBottom: '16px' }}>O empréstimo solicitado não existe ou foi removido.</p>
+        <button className="btn btn-primary" onClick={() => navigate('/emprestimos')}>Voltar para Empréstimos</button>
+      </div>
+    );
+  }
+
+  const client = clients.find(c => String(c.id || '').toLowerCase() === String(loan.clientId || '').toLowerCase());
+  const insts = installments.filter(i => String(i.loanId || '').toLowerCase() === String(loan.id || '').toLowerCase()).sort((a, b) => a.number - b.number);
+  const totalPaid = insts.reduce((s, i) => s + (i.paidAmount || 0), 0);
+  const saldoDevedor = (loan.totalAmount || 0) - totalPaid;
   const progress = loan.totalAmount > 0 ? (totalPaid / loan.totalAmount * 100) : 0;
 
   const isInterestOnly = loan.calculationMode === 'interest_only_final_payoff';
@@ -43,7 +111,7 @@ export default function LoanDetail() {
     }
 
     const st = getInstallmentStatus(installment);
-    const saldo = installment.totalAmount - installment.paidAmount;
+    const saldo = installment.totalAmount - (installment.paidAmount || 0);
     const companyName = settings?.companyName || 'AgiotoPay';
 
     let greeting = '';
@@ -55,8 +123,7 @@ export default function LoanDetail() {
     let message = '';
 
     if (st === 'paid') {
-      // Confirmation message for paid installment
-      message = `${greeting}, ${client.name}! 🙏\n\n` +
+      message = `${greeting}, ${client?.name || 'Cliente'}! 🙏\n\n` +
         `✅ *Confirmação de Pagamento*\n\n` +
         `Informamos que o pagamento da parcela *${installment.number}/${loan.installmentCount}* ` +
         `do débito *"${loan.title}"* foi registrado com sucesso.\n\n` +
@@ -67,8 +134,7 @@ export default function LoanDetail() {
         `— *${companyName}*`;
     } else if (st === 'overdue') {
       const diasAtraso = Math.abs(getDaysUntilDue(installment.dueDate));
-      // Overdue collection message
-      message = `${greeting}, ${client.name}.\n\n` +
+      message = `${greeting}, ${client?.name || 'Cliente'}.\n\n` +
         `⚠️ *Aviso de Parcela em Atraso*\n\n` +
         `Identificamos que a parcela *${installment.number}/${loan.installmentCount}* ` +
         `do débito *"${loan.title}"* está com *${diasAtraso} dia(s) de atraso*.\n\n` +
@@ -80,8 +146,7 @@ export default function LoanDetail() {
         `Aguardamos seu retorno. 🤝\n` +
         `— *${companyName}*`;
     } else if (st === 'due_today') {
-      // Due today message
-      message = `${greeting}, ${client.name}!\n\n` +
+      message = `${greeting}, ${client?.name || 'Cliente'}!\n\n` +
         `🔔 *Lembrete: Parcela Vence Hoje*\n\n` +
         `A parcela *${installment.number}/${loan.installmentCount}* ` +
         `do débito *"${loan.title}"* vence *hoje*.\n\n` +
@@ -89,9 +154,8 @@ export default function LoanDetail() {
         `Qualquer dúvida, estou à disposição. 🤝\n` +
         `— *${companyName}*`;
     } else {
-      // Regular upcoming installment
       const diasRestantes = getDaysUntilDue(installment.dueDate);
-      message = `${greeting}, ${client.name}!\n\n` +
+      message = `${greeting}, ${client?.name || 'Cliente'}!\n\n` +
         `📬 *Cobrança de Parcela*\n\n` +
         `Segue o lembrete referente à parcela *${installment.number}/${loan.installmentCount}* ` +
         `do débito *"${loan.title}"*.\n\n` +
@@ -121,11 +185,11 @@ export default function LoanDetail() {
         <div className="profile-info" style={{ width: '100%' }}>
           <div className="flex-between">
             <div>
-              <h2>{loan.title || `Débito #${id.slice(-6).toUpperCase()}`}</h2>
+              <h2>{loan.title || `Débito #${String(loan.id || '').slice(-6).toUpperCase()}`}</h2>
               <div className="flex align-center gap-8 mt-4">
-                <small className="text-muted">Código: #{id.slice(-6).toUpperCase()}</small>
+                <small className="text-muted">Código: #{String(loan.id || '').slice(-6).toUpperCase()}</small>
                 <span>•</span>
-                <small className="text-muted">Cliente: <strong className="clickable" onClick={() => navigate(`/clientes/${loan.clientId}`)} style={{ color: 'var(--accent-hover)' }}>{client?.name}</strong></small>
+                <small className="text-muted">Cliente: <strong className="clickable" onClick={() => navigate(`/clientes/${loan.clientId}`)} style={{ color: 'var(--accent-hover)' }}>{client?.name || '-'}</strong></small>
                 <span className="badge-status gray">
                   {isInterestOnly ? 'Juros Periódicos + Quitação Final' : 'Capital + Juros Amortizados'}
                 </span>
@@ -184,7 +248,7 @@ export default function LoanDetail() {
               {insts.map(i => {
                 const st = getInstallmentStatus(i);
                 const days = getDaysUntilDue(i.dueDate);
-                const isPaid = i.paidAmount >= i.totalAmount;
+                const isPaid = (i.paidAmount || 0) >= (i.totalAmount || 0);
                 return (
                   <tr key={i.id}>
                     <td>{i.number}</td>
@@ -193,8 +257,8 @@ export default function LoanDetail() {
                     <td>{formatCurrency(i.interestAmount)}</td>
                     <td><strong>{formatCurrency(i.totalAmount)}</strong></td>
                     <td className="text-green">{formatCurrency(i.paidAmount)}</td>
-                    <td className="text-red">{formatCurrency(i.totalAmount - i.paidAmount)}</td>
-                    <td><span className={`badge-status ${statusColors[st]}`}>{getStatusLabel(st)}</span></td>
+                    <td className="text-red">{formatCurrency(i.totalAmount - (i.paidAmount || 0))}</td>
+                    <td><span className={`badge-status ${statusColors[st] || 'gray'}`}>{getStatusLabel(st)}</span></td>
                     <td>{st === 'paid' ? '-' : st === 'overdue' ? <span className="text-red font-bold">{Math.abs(days)}d atraso</span> : `${days}d`}</td>
                     <td>
                       <div className="flex gap-4" style={{ flexWrap: 'nowrap' }}>
