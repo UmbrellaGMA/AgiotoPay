@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -25,6 +25,21 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/recibo/:id" element={<Receipt />} />
+          <Route path="/recibos/:id" element={<Receipt />} />
+          
+          {/* Common Aliases */}
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/home" element={<Navigate to="/" replace />} />
+          <Route path="/cliente" element={<Navigate to="/clientes" replace />} />
+          <Route path="/emprestimo" element={<Navigate to="/emprestimos" replace />} />
+          <Route path="/parcela" element={<Navigate to="/parcelas" replace />} />
+          <Route path="/pagamento" element={<Navigate to="/pagamentos" replace />} />
+          <Route path="/relatorio" element={<Navigate to="/relatorios" replace />} />
+          <Route path="/notificacao" element={<Navigate to="/notificacoes" replace />} />
+          <Route path="/usuario" element={<Navigate to="/usuarios" replace />} />
+          <Route path="/config" element={<Navigate to="/configuracoes" replace />} />
+          <Route path="/configuracao" element={<Navigate to="/configuracoes" replace />} />
+
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Layout />}>
               <Route index element={<Dashboard />} />
@@ -42,6 +57,9 @@ function App() {
               <Route path="configuracoes" element={<Settings />} />
             </Route>
           </Route>
+
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppProvider>
     </BrowserRouter>

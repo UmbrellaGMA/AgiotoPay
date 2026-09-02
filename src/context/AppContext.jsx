@@ -21,7 +21,7 @@ const toCamel = (row) => {
     related_id: 'relatedId', calculation_mode: 'calculationMode',
     signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName',
     date_format: 'dateFormat', alert_days: 'alertDays', payment_methods: 'paymentMethods',
-    birth_date: 'birthDate',
+    birth_date: 'birthDate', document_image: 'documentImage',
   };
   const out = {};
   for (const [k, v] of Object.entries(row)) {
@@ -31,6 +31,8 @@ const toCamel = (row) => {
 };
 
 // Helper: convert camelCase JS object to snake_case for DB
+const DATE_FIELDS = new Set(['birth_date', 'start_date', 'first_due_date', 'due_date', 'paid_date', 'signed_at', 'created_at', 'date']);
+
 const toSnake = (obj) => {
   if (!obj) return obj;
   const map = {
@@ -44,12 +46,17 @@ const toSnake = (obj) => {
     relatedId: 'related_id', calculationMode: 'calculation_mode',
     signedAt: 'signed_at', adminName: 'admin_name', companyName: 'company_name',
     dateFormat: 'date_format', alertDays: 'alert_days', paymentMethods: 'payment_methods',
-    birthDate: 'birth_date',
+    birthDate: 'birth_date', documentImage: 'document_image',
   };
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
     if (k === 'userId') continue; // skip legacy field
-    out[map[k] || k] = v;
+    const targetKey = map[k] || k;
+    if (DATE_FIELDS.has(targetKey) && v === '') {
+      out[targetKey] = null;
+    } else {
+      out[targetKey] = v;
+    }
   }
   return out;
 };
@@ -134,19 +141,28 @@ export const AppProvider = ({ children }) => {
     const row = toSnake({ ...client, tags: client.tags || [] });
     delete row.id;
     const { data, error } = await supabase.from('clients').insert(row).select().single();
-    if (error) { console.error(error); return null; }
+    if (error) {
+      console.error('Error adding client:', error);
+      alert('Erro ao salvar cliente no banco de dados: ' + error.message);
+      return null;
+    }
     const c = toCamel(data);
     setClients(prev => [c, ...prev]);
-    addActivity('client_created', `Novo cliente cadastrado: ${client.name}`, c.id);
+    await addActivity('client_created', `Novo cliente cadastrado: ${client.name}`, c.id);
     return c;
   }, [addActivity]);
 
   const updateClient = useCallback(async (id, updates) => {
     const row = toSnake(updates);
     delete row.id;
-    await supabase.from('clients').update(row).eq('id', id);
+    const { error } = await supabase.from('clients').update(row).eq('id', id);
+    if (error) {
+      console.error('Error updating client:', error);
+      alert('Erro ao atualizar cliente no banco de dados: ' + error.message);
+      return;
+    }
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-    addActivity('client_updated', `Cliente atualizado: ${updates.name || id}`, id);
+    await addActivity('client_updated', `Cliente atualizado: ${updates.name || id}`, id);
   }, [addActivity]);
 
   const deleteClient = useCallback(async (id) => {
@@ -158,7 +174,7 @@ export const AppProvider = ({ children }) => {
     setInstallments(prev => prev.filter(i => i.clientId !== id));
     setLoans(prev => prev.filter(l => l.clientId !== id));
     setClients(prev => prev.filter(c => c.id !== id));
-    addActivity('client_deleted', 'Cliente e todos os seus débitos foram removidos', id);
+    await addActivity('client_deleted', 'Cliente e todos os seus débitos foram removidos', id);
   }, [addActivity]);
 
   // Helper for due dates
@@ -196,7 +212,11 @@ export const AppProvider = ({ children }) => {
     delete loanRow.user_id;
 
     const { data: loanData, error: loanErr } = await supabase.from('loans').insert(loanRow).select().single();
-    if (loanErr) { console.error(loanErr); return null; }
+    if (loanErr) {
+      console.error('Error adding loan:', loanErr);
+      alert('Erro ao salvar empréstimo no banco de dados: ' + loanErr.message);
+      return null;
+    }
 
     const savedLoan = toCamel(loanData);
     const count = parseInt(savedLoan.installmentCount) || 1;

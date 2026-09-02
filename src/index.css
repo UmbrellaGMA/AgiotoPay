@@ -324,6 +324,86 @@ input, select, textarea {
   display: none;
 }
 
+/* User Profile Header Component */
+.header-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  padding-left: 12px;
+  margin-left: 4px;
+  height: 38px;
+}
+
+.header-user-profile .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.user-details strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  letter-spacing: -0.2px;
+}
+
+.user-details small {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 1px;
+}
+
+.user-details small svg {
+  color: #00D4FF;
+}
+
+.btn-logout-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--header-btn-bg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--header-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.btn-logout-icon:hover {
+  background: rgba(244, 63, 94, 0.25);
+  color: #ff4d6d;
+  border-color: rgba(244, 63, 94, 0.4);
+  transform: translateY(-1px);
+}
+
 /* ─────────────────────────────────────────────────────────────
    SIDEBAR (MINIMIA CLEAN NAV)
    ───────────────────────────────────────────────────────────── */
