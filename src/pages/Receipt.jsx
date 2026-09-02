@@ -3,6 +3,8 @@ import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { useRef, useState, useEffect } from 'react';
 
+import Logo from '../components/Common/Logo';
+
 export default function Receipt() {
   const { id } = useParams(); // installment ID
   const { installments, loans, clients, settings, saveSignature, loading } = useApp();
@@ -155,10 +157,9 @@ export default function Receipt() {
         <div className="receipt-card">
           {/* Header */}
           <div className="receipt-header">
-            <div className="receipt-logo">A</div>
             <div className="receipt-header-text">
-              <h1>AGIOTOPAY</h1>
-              <p>{settings?.companyName || 'Sistema de Gerenciamento Financeiro'}</p>
+              <Logo variant="full" size={38} />
+              <p style={{ marginTop: '4px', fontSize: '0.8rem', color: '#64748b' }}>{settings?.companyName || 'Sistema de Gerenciamento Financeiro'}</p>
             </div>
             <div className="receipt-badge-wrapper">
               <span className={`receipt-badge ${isPaid ? 'paid' : 'pending'}`}>

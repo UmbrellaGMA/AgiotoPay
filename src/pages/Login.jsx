@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
+import Logo from '../components/Common/Logo';
+
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useApp();
@@ -35,10 +37,8 @@ export default function Login() {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div className="login-header">
-          <div className="login-logo">A</div>
-          <h1>AGIOTOPAY</h1>
-          <p>Painel de Gestão Financeira</p>
+        <div className="login-header" style={{ marginBottom: 28 }}>
+          <Logo variant="login" size={76} />
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">

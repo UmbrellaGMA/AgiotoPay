@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Search, Bell, Menu, LogOut, Shield, Sun, Moon } from 'lucide-react';
 
+import Logo from '../Common/Logo';
+
 export default function Header() {
   const { searchQuery, setSearchQuery, notifications, setSidebarOpen, currentUser, logout, theme, toggleTheme } = useApp();
   const navigate = useNavigate();
@@ -25,8 +27,7 @@ export default function Header() {
           <Menu size={18} />
         </button>
         <div className="header-brand-mobile hide-desktop">
-          <div className="logo-sm">A</div>
-          <span>AGIOTOPAY</span>
+          <Logo variant="header" />
         </div>
         <div className="header-search">
           <Search size={16} />

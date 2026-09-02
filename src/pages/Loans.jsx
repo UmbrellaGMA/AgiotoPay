@@ -81,7 +81,7 @@ export default function Loans() {
     };
   }, [form]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.clientId || !form.principalAmount) return;
 
@@ -91,7 +91,7 @@ export default function Loans() {
       return d.toISOString().split('T')[0];
     })();
 
-    addLoan({
+    await addLoan({
       clientId: form.clientId,
       title: form.title || `Empréstimo R$ ${parseFloat(form.principalAmount).toLocaleString('pt-BR')}`,
       principalAmount: preview.principalAmount,

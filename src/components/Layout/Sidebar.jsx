@@ -5,6 +5,8 @@ import {
   Calendar, FileBarChart, Bell, Settings, X, UserCheck
 } from 'lucide-react';
 
+import Logo from '../Common/Logo';
+
 export default function Sidebar() {
   const { sidebarOpen, setSidebarOpen, currentUser, notifications } = useApp();
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -34,8 +36,7 @@ export default function Sidebar() {
       <div className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="logo">A</div>
-          <h2>AGIOTOPAY</h2>
+          <Logo variant="full" size={32} />
           <button className="menu-btn header-btn" style={{ marginLeft: 'auto' }} onClick={() => setSidebarOpen(false)}>
             <X size={18} />
           </button>

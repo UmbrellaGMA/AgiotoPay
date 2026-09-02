@@ -53,8 +53,8 @@ export default function ClientProfile() {
   const atrasadas = clientInst.filter(i => activeLoans.some(l => l.id === i.loanId) && getInstallmentStatus(i) === 'overdue').length;
   const status = getClientStatus(client, loans, installments);
 
-  const handleSaveClient = () => {
-    updateClient(id, clientForm);
+  const handleSaveClient = async () => {
+    await updateClient(id, clientForm);
     setEditing(false);
   };
 
@@ -63,10 +63,10 @@ export default function ClientProfile() {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const updated = { ...clientForm, documentImage: reader.result };
         setClientForm(updated);
-        updateClient(id, { documentImage: reader.result });
+        await updateClient(id, { documentImage: reader.result });
       };
       reader.readAsDataURL(file);
     }
@@ -101,7 +101,7 @@ export default function ClientProfile() {
     };
   }, [debitForm]);
 
-  const handleCreateDebit = (e) => {
+  const handleCreateDebit = async (e) => {
     e.preventDefault();
     if (!debitForm.principalAmount) return;
 
@@ -111,7 +111,7 @@ export default function ClientProfile() {
       return d.toISOString().split('T')[0];
     })();
 
-    addLoan({
+    await addLoan({
       clientId: id,
       title: debitForm.title || `Débito R$ ${parseFloat(debitForm.principalAmount).toLocaleString('pt-BR')}`,
       principalAmount: debitPreview.principalAmount,

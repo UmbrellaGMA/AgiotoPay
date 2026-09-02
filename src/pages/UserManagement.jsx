@@ -35,7 +35,7 @@ export default function UserManagement() {
     setShowModal(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -48,7 +48,7 @@ export default function UserManagement() {
       };
       if (form.password) updates.password = form.password;
 
-      updateUser(editingUser.id, updates);
+      await updateUser(editingUser.id, updates);
       setSuccessMsg('Usuário atualizado com sucesso!');
       setShowModal(false);
     } else {
@@ -56,33 +56,33 @@ export default function UserManagement() {
         setErrorMsg('A senha é obrigatória para novos usuários.');
         return;
       }
-      const result = addUser(form);
-      if (result.success) {
+      const result = await addUser(form);
+      if (result?.success) {
         setSuccessMsg(`Usuário ${form.name} criado com sucesso!`);
         setShowModal(false);
       } else {
-        setErrorMsg(result.error);
+        setErrorMsg(result?.error || 'Erro ao criar usuário.');
       }
     }
   };
 
-  const handleToggleStatus = (user) => {
+  const handleToggleStatus = async (user) => {
     if (user.id === currentUser?.id) {
       alert('Você não pode alterar seu próprio status.');
       return;
     }
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
-    updateUser(user.id, { status: newStatus });
+    await updateUser(user.id, { status: newStatus });
   };
 
-  const handleDelete = (user) => {
+  const handleDelete = async (user) => {
     if (user.id === currentUser?.id) {
       alert('Você não pode excluir sua própria conta enquanto estiver conectado.');
       return;
     }
     if (window.confirm(`Tem certeza que deseja excluir o acesso de ${user.name}?`)) {
-      const res = deleteUser(user.id);
-      if (!res.success) alert(res.error);
+      const res = await deleteUser(user.id);
+      if (res && !res.success) alert(res.error);
     }
   };
 

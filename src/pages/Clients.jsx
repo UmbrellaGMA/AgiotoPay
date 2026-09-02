@@ -53,9 +53,9 @@ export default function Clients() {
     return result;
   }, [clientsData, search, filter]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    addClient(form);
+    await addClient(form);
     setForm({ name: '', cpf: '', phone: '', whatsapp: '', email: '', address: '', city: '', state: '', birthDate: '', notes: '' });
     setShowModal(false);
   };
