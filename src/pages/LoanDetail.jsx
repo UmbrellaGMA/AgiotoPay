@@ -1,13 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate, getInstallmentStatus, getStatusLabel, getDaysUntilDue } from '../utils/formatters';
-import { ArrowLeft, Info, MessageCircle, FileText, Link2, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Info, MessageCircle, FileText, Link2, Copy, Check, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export default function LoanDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { loans, clients, installments, settings } = useApp();
+  const { loans, clients, installments, settings, deleteLoan } = useApp();
   const [copiedId, setCopiedId] = useState(null);
 
   const loan = loans.find(l => l.id === id);
@@ -44,7 +44,6 @@ export default function LoanDetail() {
 
     const st = getInstallmentStatus(installment);
     const saldo = installment.totalAmount - installment.paidAmount;
-    const receiptLink = getReceiptUrl(installment);
     const companyName = settings?.companyName || 'AgiotoPay';
 
     let greeting = '';
@@ -63,7 +62,7 @@ export default function LoanDetail() {
         `do débito *"${loan.title}"* foi registrado com sucesso.\n\n` +
         `💰 Valor: *${formatCurrency(installment.totalAmount)}*\n` +
         `📅 Pago em: *${installment.paidDate ? formatDate(installment.paidDate) : 'N/A'}*\n\n` +
-        `📄 Recibo disponível em:\n${receiptLink}\n\n` +
+        `📄 Recibo disponível em:\n${getReceiptUrl(installment)}\n\n` +
         `Obrigado pela pontualidade! 🤝\n` +
         `— *${companyName}*`;
     } else if (st === 'overdue') {
@@ -77,7 +76,6 @@ export default function LoanDetail() {
         `• Vencimento: *${formatDate(installment.dueDate)}*\n` +
         `• Valor da parcela: *${formatCurrency(installment.totalAmount)}*\n` +
         `• Saldo pendente: *${formatCurrency(saldo)}*\n\n` +
-        `📄 Recibo e assinatura digital:\n${receiptLink}\n\n` +
         `Por favor, regularize o pagamento o mais breve possível para evitar acúmulo.\n\n` +
         `Aguardamos seu retorno. 🤝\n` +
         `— *${companyName}*`;
@@ -88,7 +86,6 @@ export default function LoanDetail() {
         `A parcela *${installment.number}/${loan.installmentCount}* ` +
         `do débito *"${loan.title}"* vence *hoje*.\n\n` +
         `💰 Valor: *${formatCurrency(installment.totalAmount)}*\n\n` +
-        `📄 Recibo e assinatura digital:\n${receiptLink}\n\n` +
         `Qualquer dúvida, estou à disposição. 🤝\n` +
         `— *${companyName}*`;
     } else {
@@ -107,8 +104,7 @@ export default function LoanDetail() {
           `• Saldo restante: *${formatCurrency(saldo)}*\n`;
       }
 
-      message += `\n📄 Recibo e assinatura digital:\n${receiptLink}\n\n` +
-        `Qualquer dúvida, estou à disposição. 🤝\n` +
+      message += `\nQualquer dúvida, estou à disposição. 🤝\n` +
         `— *${companyName}*`;
     }
 
@@ -135,7 +131,21 @@ export default function LoanDetail() {
                 </span>
               </div>
             </div>
-            <span className={`badge-status ${loan.status === 'active' ? 'blue' : 'green'}`}>{loan.status === 'active' ? 'Ativo' : 'Quitado'}</span>
+            <div className="flex align-center gap-8">
+              <span className={`badge-status ${loan.status === 'active' ? 'blue' : 'green'}`}>{loan.status === 'active' ? 'Ativo' : 'Quitado'}</span>
+              <button
+                className="btn btn-danger btn-sm"
+                title="Apagar Empréstimo"
+                onClick={() => {
+                  if (window.confirm(`Tem certeza que deseja APAGAR o empréstimo "${loan.title}"?\n\nTodas as parcelas e pagamentos serão removidos permanentemente.`)) {
+                    deleteLoan(id).then(() => navigate('/emprestimos'));
+                  }
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Trash2 size={14} /> Apagar
+              </button>
+            </div>
           </div>
         </div>
       </div>

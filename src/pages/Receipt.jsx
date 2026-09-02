@@ -5,16 +5,16 @@ import { useRef, useState, useEffect } from 'react';
 
 export default function Receipt() {
   const { id } = useParams(); // installment ID
-  const { installments, loans, clients, settings, saveSignature } = useApp();
+  const { installments, loans, clients, settings, saveSignature, loading } = useApp();
   const canvasRef = useRef(null);
 
   const installment = installments.find(i => i.id === id);
   const loan = installment ? loans.find(l => l.id === installment.loanId) : null;
   const client = loan ? clients.find(c => c.id === loan.clientId) : null;
 
-  const [signed, setSigned] = useState(!!installment?.signature);
+  const [signed, setSigned] = useState(false);
   const [drawing, setDrawing] = useState(false);
-  const [signatureData, setSignatureData] = useState(installment?.signature || null);
+  const [signatureData, setSignatureData] = useState(null);
   const [copied, setCopied] = useState(false);
 
   // Sync state if installment loads or changes
@@ -102,6 +102,21 @@ export default function Receipt() {
     window.print();
   };
 
+  // Show loading while Supabase data loads
+  if (loading) {
+    return (
+      <div className="receipt-page">
+        <div className="receipt-container">
+          <div className="receipt-not-found">
+            <div className="receipt-not-found-icon" style={{ animation: 'pulse 1.5s infinite' }}>⏳</div>
+            <h2>Carregando recibo...</h2>
+            <p>Aguarde enquanto buscamos os dados.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!installment || !loan || !client) {
     return (
       <div className="receipt-page">
@@ -158,7 +173,7 @@ export default function Receipt() {
           <div className="receipt-title-section">
             <h2>RECIBO DE COBRANÇA</h2>
             <p className="receipt-subtitle">Parcela {installment.number} de {loan.installmentCount}</p>
-            <p className="receipt-code">Código: #{installment.id.toUpperCase()}</p>
+            <p className="receipt-code">Código: #{(installment.id || '').slice(-8).toUpperCase()}</p>
           </div>
 
           <div className="receipt-divider" />
@@ -279,7 +294,7 @@ export default function Receipt() {
                 <img src={signatureData} alt="Assinatura Digital" className="receipt-signature-img" />
                 <div className="receipt-signed-meta">
                   <p>📌 Assinado digitalmente em {signedDateStr} às {signedTimeStr}</p>
-                  <p>🔒 Assinatura registrada e vinculada ao recibo #{installment.id.toUpperCase()}</p>
+                  <p>🔒 Assinatura registrada e vinculada ao recibo #{(installment.id || '').slice(-8).toUpperCase()}</p>
                 </div>
               </div>
             ) : (
