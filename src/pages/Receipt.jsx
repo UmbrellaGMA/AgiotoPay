@@ -40,6 +40,7 @@ export default function Receipt() {
   const [signatureData, setSignatureData] = useState(null);
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   // 1. Try finding records in global context using case-insensitive comparison
   const contextInstallment = installments.find(i => String(i.id || '').toLowerCase() === String(id || '').toLowerCase());
@@ -252,7 +253,7 @@ export default function Receipt() {
         if (saveSignature) {
           saveSignature(installment.id, data);
         }
-        alert('Assinatura registrada e salva com sucesso!');
+        setShowDownloadModal(true);
       }
     } catch (err) {
       console.error('Error confirming signature:', err);
@@ -316,15 +317,17 @@ export default function Receipt() {
   return (
     <div className="receipt-page">
       <div className="receipt-container">
-        {/* Actions bar — hidden on print */}
-        <div className="receipt-actions no-print">
-          <button className="receipt-btn secondary" onClick={copyLink}>
-            {copied ? '✅ Link Copiado!' : '🔗 Copiar Link'}
-          </button>
-          <button className="receipt-btn primary" onClick={handlePrint}>
-            🖨️ Imprimir / Salvar PDF
-          </button>
-        </div>
+        {/* Actions bar — only shown for logged-in operators/managers, hidden on public client link */}
+        {currentUser && (
+          <div className="receipt-actions no-print">
+            <button className="receipt-btn secondary" onClick={copyLink}>
+              {copied ? '✅ Link Copiado!' : '🔗 Copiar Link'}
+            </button>
+            <button className="receipt-btn primary" onClick={handlePrint}>
+              🖨️ Imprimir / Salvar PDF
+            </button>
+          </div>
+        )}
 
         {/* Printable Receipt Card */}
         <div className="receipt-card">
@@ -443,17 +446,11 @@ export default function Receipt() {
             {signed && signatureData ? (
               <div className="receipt-signed-box">
                 <img src={signatureData} alt="Assinatura Digital" className="receipt-signature-img" />
-                <div className="receipt-signature-meta">
-                  <p>📌 Assinado digitalmente em {signedDateStr} às {signedTimeStr}</p>
-                  <p>🔒 Assinatura registrada e vinculada ao recibo #{(installment.id || '').slice(-8).toUpperCase()}</p>
+                <div className="receipt-signature-meta" style={{ marginTop: '12px' }}>
+                  <p style={{ color: '#10b981', fontWeight: 600 }}>✅ Recibo Assinado Digitalmente</p>
+                  <p>📌 Registrado em {signedDateStr} às {signedTimeStr}</p>
+                  <p>🔒 Assinatura vinculada e autenticada no recibo #{(installment.id || '').slice(-8).toUpperCase()}</p>
                 </div>
-                <button
-                  className="receipt-btn secondary no-print mt-12"
-                  onClick={clearSignature}
-                  style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                >
-                  ✏️ Refazer Assinatura
-                </button>
               </div>
             ) : (
               <div className="receipt-signature-box">
@@ -490,6 +487,40 @@ export default function Receipt() {
           </div>
         </div>
       </div>
+
+      {/* Download PDF Modal Popup after signing */}
+      {showDownloadModal && (
+        <div className="modal-overlay no-print" onClick={() => setShowDownloadModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center', padding: '28px 24px' }}>
+            <div style={{ fontSize: '3.2rem', marginBottom: 12 }}>📄</div>
+            <h2 style={{ marginBottom: 10, fontSize: '1.4rem' }}>Recibo Assinado com Sucesso!</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: '0.95rem', lineHeight: '1.5' }}>
+              Sua assinatura digital foi registrada com segurança. Deseja baixar uma cópia do recibo em PDF agora?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowDownloadModal(false);
+                  setTimeout(() => {
+                    handlePrint();
+                  }, 100);
+                }}
+                style={{ padding: '12px 20px', fontSize: '1rem', justifyContent: 'center' }}
+              >
+                📥 Baixar / Salvar PDF do Recibo
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowDownloadModal(false)}
+                style={{ padding: '10px 20px', fontSize: '0.9rem', justifyContent: 'center' }}
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
