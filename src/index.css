@@ -1426,6 +1426,8 @@ tr:hover td {
 .receipt-actions { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 
 .receipt-card {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1433,9 +1435,37 @@ tr:hover td {
   box-shadow: var(--shadow);
 }
 
+.receipt-card > *:not(.receipt-watermark) {
+  position: relative;
+  z-index: 1;
+}
+
+.receipt-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.receipt-watermark img {
+  width: 320px;
+  height: 320px;
+  max-width: 80%;
+  object-fit: contain;
+  filter: grayscale(10%);
+}
+
 .receipt-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 18px;
   flex-wrap: wrap;
 }
@@ -1992,11 +2022,24 @@ tr:hover td {
   }
 
   .receipt-card {
+    position: relative !important;
+    overflow: hidden !important;
     border: none !important;
     box-shadow: none !important;
     padding: 10px 14px !important;
     background: #ffffff !important;
     page-break-inside: avoid !important;
+  }
+
+  .receipt-watermark {
+    opacity: 0.08 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .receipt-watermark img {
+    width: 260px !important;
+    height: 260px !important;
   }
 
   .receipt-divider {

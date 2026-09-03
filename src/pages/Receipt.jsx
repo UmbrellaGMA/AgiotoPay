@@ -317,10 +317,15 @@ export default function Receipt() {
 
         {/* Printable Receipt Card */}
         <div className="receipt-card">
+          {/* Watermark Logo Background */}
+          <div className="receipt-watermark" aria-hidden="true">
+            <img src="/logo-icon.png" alt="AgiotoPay Marca D'água" />
+          </div>
+
           {/* Header */}
           <div className="receipt-header">
             <div className="receipt-header-brand">
-              <Logo size="medium" hideSubtitle={false} />
+              <Logo size={36} showSubtitle={true} />
               <div className="receipt-company-info mt-8">
                 <strong>{settings.companyName || 'AgiotoPay'}</strong>
                 {settings.adminName && <span>Resp.: {settings.adminName}</span>}
@@ -328,7 +333,7 @@ export default function Receipt() {
             </div>
             <div className="receipt-badge-wrap">
               <span className={`receipt-badge ${isPaid ? 'paid' : 'pending'}`}>
-                {isPaid ? 'PAYMENT CONFIRMED / PAGO' : 'EM ABERTO'}
+                {isPaid ? 'PAGO' : 'EM ABERTO'}
               </span>
               <div className="receipt-number mt-8">
                 RECIBO Nº #{String(installment.id || '').slice(-8).toUpperCase()}
@@ -404,7 +409,7 @@ export default function Receipt() {
                     <td className="text-red"><strong>{formatCurrency(saldo)}</strong></td>
                   </tr>
                 </tbody>
-              </table>
+                </table>
             </div>
           </div>
 
@@ -466,8 +471,7 @@ export default function Receipt() {
 
           {/* Footer */}
           <div className="receipt-footer">
-            <p>Documento gerado automaticamente pelo sistema <strong>AGIOTOPAY</strong></p>
-            <p>{now.toLocaleDateString('pt-BR')} às {now.toLocaleTimeString('pt-BR')}</p>
+            <p>Emitido em {now.toLocaleDateString('pt-BR')} às {now.toLocaleTimeString('pt-BR')}</p>
           </div>
         </div>
       </div>
