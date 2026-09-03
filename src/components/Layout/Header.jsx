@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { Search, Bell, Menu, LogOut, Shield, Sun, Moon } from 'lucide-react';
+import { Search, Bell, Menu, LogOut, Shield, Sun, Moon, Settings } from 'lucide-react';
 
 import Logo from '../Common/Logo';
 
@@ -57,12 +57,27 @@ export default function Header() {
           {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
         </button>
 
+        {/* Configurações / Logo Button */}
+        <button className="header-btn" onClick={() => navigate('/configuracoes')} title="Configurações e Logo">
+          <Settings size={18} />
+        </button>
+
         {currentUser && (
           <div className="header-user-profile">
-            <div className="avatar" title={currentUser.name}>
+            <div
+              className="avatar"
+              title="Ir para Configurações"
+              onClick={() => navigate('/configuracoes')}
+              style={{ cursor: 'pointer' }}
+            >
               {currentUser.name[0]}
             </div>
-            <div className="user-details hide-mobile">
+            <div
+              className="user-details hide-mobile"
+              onClick={() => navigate('/configuracoes')}
+              style={{ cursor: 'pointer' }}
+              title="Ir para Configurações"
+            >
               <strong>{currentUser.name}</strong>
               <small>
                 {currentUser.role === 'admin' && <Shield size={10} />}
