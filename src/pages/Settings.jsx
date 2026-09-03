@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Settings as SettingsIcon, Plus, Trash2, RotateCcw, X } from 'lucide-react';
+import { Settings as SettingsIcon, Plus, Trash2, RotateCcw, X, Upload, Image as ImageIcon } from 'lucide-react';
 
 export default function Settings() {
   const { settings, updateSettings, markers, addMarker, deleteMarker, activities, resetData, currentUser } = useApp();
@@ -34,23 +34,73 @@ export default function Settings() {
 
       {tab === 'general' && (
         <div className="chart-card">
-          <h3 style={{ marginBottom: 20 }}>Dados do Administrador</h3>
+          <h3 style={{ marginBottom: 20 }}>Dados do Administrador & Empresa</h3>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Nome do Administrador</label><input className="form-input" value={settings.adminName} onChange={e => updateSettings({ adminName: e.target.value })} /></div>
-            <div className="form-group"><label className="form-label">Nome da Empresa</label><input className="form-input" value={settings.companyName} onChange={e => updateSettings({ companyName: e.target.value })} /></div>
+            <div className="form-group"><label className="form-label">Nome do Administrador</label><input className="form-input" value={settings.adminName || ''} onChange={e => updateSettings({ adminName: e.target.value })} /></div>
+            <div className="form-group"><label className="form-label">Nome da Empresa (Recibo)</label><input className="form-input" value={settings.companyName || ''} onChange={e => updateSettings({ companyName: e.target.value })} /></div>
           </div>
+
+          <h3 style={{ marginTop: 24, marginBottom: 16 }}>Logo Personalizada do Recibo</h3>
+          <div className="form-group mb-24">
+            <label className="form-label">Logo da Empresa / Marca D'água</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              {settings.companyLogo ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--bg-input)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                  <img src={settings.companyLogo} alt="Logo Personalizada" style={{ maxHeight: 60, maxWidth: 160, objectFit: 'contain' }} />
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger"
+                    onClick={() => updateSettings({ companyLogo: null })}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Trash2 size={14} /> Remover Logo
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="company-logo-file"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 3 * 1024 * 1024) {
+                          alert('A imagem deve ter no máximo 3MB.');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          updateSettings({ companyLogo: evt.target.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <label htmlFor="company-logo-file" className="btn btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', width: 'fit-content' }}>
+                    <Upload size={16} /> Selecionar Foto / Logo
+                  </label>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Envie a imagem (PNG, JPG ou SVG) da sua empresa para ser exibida no topo e como marca d'água em todos os recibos.
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Moeda</label><input className="form-input" value={settings.currency} readOnly /></div>
-            <div className="form-group"><label className="form-label">Formato de Data</label><input className="form-input" value={settings.dateFormat} readOnly /></div>
+            <div className="form-group"><label className="form-label">Moeda</label><input className="form-input" value={settings.currency || 'BRL (R$)'} readOnly /></div>
+            <div className="form-group"><label className="form-label">Formato de Data</label><input className="form-input" value={settings.dateFormat || 'DD/MM/YYYY'} readOnly /></div>
           </div>
           <h3 style={{ marginTop: 24, marginBottom: 12 }}>Formas de Pagamento</h3>
           <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
-            {settings.paymentMethods.map((m, i) => (
+            {(settings.paymentMethods || ['pix', 'dinheiro']).map((m, i) => (
               <span key={i} className="badge-status blue">{m}</span>
             ))}
           </div>
           <h3 style={{ marginTop: 24, marginBottom: 12 }}>Alertas de Vencimento</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Alertas configurados para: {settings.alertDays.map(d => d === 0 ? 'No dia' : `${d} dia(s) antes`).join(', ')}</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Alertas configurados para: {(settings.alertDays || [0]).map(d => d === 0 ? 'No dia' : `${d} dia(s) antes`).join(', ')}</p>
         </div>
       )}
 

@@ -19,7 +19,7 @@ const toCamel = (row) => {
     due_date: 'dueDate', paid_amount: 'paidAmount', paid_date: 'paidDate',
     interest_amount: 'interestAmount', installment_ids: 'installmentIds',
     related_id: 'relatedId', calculation_mode: 'calculationMode',
-    signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName',
+    signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName', company_logo: 'companyLogo',
     date_format: 'dateFormat', alert_days: 'alertDays', payment_methods: 'paymentMethods',
     birth_date: 'birthDate', document_image: 'documentImage',
   };
@@ -44,7 +44,7 @@ const toSnake = (obj) => {
     dueDate: 'due_date', paidAmount: 'paid_amount', paidDate: 'paid_date',
     interestAmount: 'interest_amount', installmentIds: 'installment_ids',
     relatedId: 'related_id', calculationMode: 'calculation_mode',
-    signedAt: 'signed_at', adminName: 'admin_name', companyName: 'company_name',
+    signedAt: 'signed_at', adminName: 'admin_name', companyName: 'company_name', companyLogo: 'company_logo',
     dateFormat: 'date_format', alertDays: 'alert_days', paymentMethods: 'payment_methods',
     birthDate: 'birth_date', documentImage: 'document_image',
   };

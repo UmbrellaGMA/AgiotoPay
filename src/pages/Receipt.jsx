@@ -17,7 +17,7 @@ const toCamel = (row) => {
     due_date: 'dueDate', paid_amount: 'paidAmount', paid_date: 'paidDate',
     interest_amount: 'interestAmount', installment_ids: 'installmentIds',
     related_id: 'relatedId', calculation_mode: 'calculationMode',
-    signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName',
+    signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName', company_logo: 'companyLogo',
     date_format: 'dateFormat', alert_days: 'alertDays', payment_methods: 'paymentMethods',
     birth_date: 'birthDate', document_image: 'documentImage',
   };
@@ -318,18 +318,22 @@ export default function Receipt() {
         {/* Printable Receipt Card */}
         <div className="receipt-card">
           {/* Watermark Logo Background */}
-          <div className="receipt-watermark" aria-hidden="true">
-            <img src="/logo-icon.png" alt="AgiotoPay Marca D'água" />
-          </div>
+          {settings.companyLogo && (
+            <div className="receipt-watermark" aria-hidden="true">
+              <img src={settings.companyLogo} alt="Marca D'água" />
+            </div>
+          )}
 
           {/* Header */}
           <div className="receipt-header">
             <div className="receipt-header-brand">
-              <Logo size={36} showSubtitle={true} />
-              <div className="receipt-company-info mt-8">
-                <strong>{settings.companyName || 'AgiotoPay'}</strong>
-                {settings.adminName && <span>Resp.: {settings.adminName}</span>}
-              </div>
+              {settings.companyLogo ? (
+                <img src={settings.companyLogo} alt={settings.companyName || 'Logo'} className="receipt-header-logo" />
+              ) : (
+                <div className="receipt-company-info">
+                  <strong style={{ fontSize: '1.4rem' }}>{settings.companyName || 'RECIBO DE PAGAMENTO'}</strong>
+                </div>
+              )}
             </div>
             <div className="receipt-badge-wrap">
               <span className={`receipt-badge ${isPaid ? 'paid' : 'pending'}`}>
