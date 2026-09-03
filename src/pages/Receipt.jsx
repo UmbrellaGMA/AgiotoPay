@@ -302,6 +302,10 @@ export default function Receipt() {
   const signedDateStr = installment.signedAt ? new Date(installment.signedAt).toLocaleDateString('pt-BR') : now.toLocaleDateString('pt-BR');
   const signedTimeStr = installment.signedAt ? new Date(installment.signedAt).toLocaleTimeString('pt-BR') : now.toLocaleTimeString('pt-BR');
 
+  const activeUser = (loan?.userId ? users.find(u => u.id === loan.userId) : null) || currentUser || {};
+  const companyLogo = activeUser.companyLogo || settings.companyLogo;
+  const companyName = activeUser.companyName || settings.companyName;
+
   return (
     <div className="receipt-page">
       <div className="receipt-container">
@@ -318,20 +322,20 @@ export default function Receipt() {
         {/* Printable Receipt Card */}
         <div className="receipt-card">
           {/* Watermark Logo Background */}
-          {settings.companyLogo && (
+          {companyLogo && (
             <div className="receipt-watermark" aria-hidden="true">
-              <img src={settings.companyLogo} alt="Marca D'água" />
+              <img src={companyLogo} alt="Marca D'água" />
             </div>
           )}
 
           {/* Header */}
           <div className="receipt-header">
             <div className="receipt-header-brand">
-              {settings.companyLogo ? (
-                <img src={settings.companyLogo} alt={settings.companyName || 'Logo'} className="receipt-header-logo" />
+              {companyLogo ? (
+                <img src={companyLogo} alt={companyName || 'Logo'} className="receipt-header-logo" />
               ) : (
                 <div className="receipt-company-info">
-                  <strong style={{ fontSize: '1.4rem' }}>{settings.companyName || 'RECIBO DE PAGAMENTO'}</strong>
+                  <strong style={{ fontSize: '1.4rem' }}>{companyName || 'RECIBO DE PAGAMENTO'}</strong>
                 </div>
               )}
             </div>

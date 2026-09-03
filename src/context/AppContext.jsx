@@ -465,7 +465,15 @@ export const AppProvider = ({ children }) => {
     if (!user) return { success: false, error: 'Usuário não encontrado.' };
     if (user.password !== password) return { success: false, error: 'Senha incorreta.' };
     if (user.status === 'blocked') return { success: false, error: 'Usuário bloqueado.' };
-    const session = { id: user.id, name: user.name, email: user.email, role: user.role, status: user.status };
+    const session = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      companyName: user.companyName,
+      companyLogo: user.companyLogo,
+    };
     setCurrentUser(session);
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session));
     return { success: true, user: session };

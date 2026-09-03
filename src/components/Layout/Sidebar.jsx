@@ -24,11 +24,11 @@ export default function Sidebar() {
     { to: '/agenda', icon: Calendar, label: 'Agenda' },
     { to: '/relatorios', icon: FileBarChart, label: 'Relatórios' },
     { to: '/notificacoes', icon: Bell, label: 'Notificações', badge: unreadCount > 0 ? unreadCount : null },
+    { to: '/configuracoes', icon: Settings, label: 'Configurações' },
   ];
 
   const adminItems = [
     { to: '/usuarios', icon: UserCheck, label: 'Usuários Agiotas' },
-    { to: '/configuracoes', icon: Settings, label: 'Configurações' },
   ];
 
   return (
