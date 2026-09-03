@@ -120,7 +120,25 @@ export const AppProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+
+    // Subscribe to real-time database updates for instant multi-browser synchronization
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public' },
+        () => {
+          fetchAll();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchAll, currentUser?.id]);
 
   // ── FILTER DATA PER USER FOR ISOLATION ──
   const clients = useMemo(() => {
