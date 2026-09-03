@@ -18,7 +18,7 @@ const toCamel = (row) => {
     start_date: 'startDate', first_due_date: 'firstDueDate', created_at: 'createdAt',
     due_date: 'dueDate', paid_amount: 'paidAmount', paid_date: 'paidDate',
     interest_amount: 'interestAmount', installment_ids: 'installmentIds',
-    related_id: 'relatedId', calculation_mode: 'calculationMode',
+    related_id: 'relatedId', calculation_mode: 'calculationMode', user_id: 'userId',
     signed_at: 'signedAt', admin_name: 'adminName', company_name: 'companyName', company_logo: 'companyLogo',
     date_format: 'dateFormat', alert_days: 'alertDays', payment_methods: 'paymentMethods',
     birth_date: 'birthDate', document_image: 'documentImage',
@@ -43,14 +43,13 @@ const toSnake = (obj) => {
     startDate: 'start_date', firstDueDate: 'first_due_date', createdAt: 'created_at',
     dueDate: 'due_date', paidAmount: 'paid_amount', paidDate: 'paid_date',
     interestAmount: 'interest_amount', installmentIds: 'installment_ids',
-    relatedId: 'related_id', calculationMode: 'calculation_mode',
+    relatedId: 'related_id', calculationMode: 'calculation_mode', userId: 'user_id',
     signedAt: 'signed_at', adminName: 'admin_name', companyName: 'company_name', companyLogo: 'company_logo',
     dateFormat: 'date_format', alertDays: 'alert_days', paymentMethods: 'payment_methods',
     birthDate: 'birth_date', documentImage: 'document_image',
   };
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (k === 'userId') continue; // skip legacy field
     const targetKey = map[k] || k;
     if (DATE_FIELDS.has(targetKey) && v === '') {
       out[targetKey] = null;
@@ -62,12 +61,12 @@ const toSnake = (obj) => {
 };
 
 export const AppProvider = ({ children }) => {
-  const [clients, setClients] = useState([]);
-  const [loans, setLoans] = useState([]);
-  const [installments, setInstallments] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [activities, setActivities] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [allClients, setAllClients] = useState([]);
+  const [allLoans, setAllLoans] = useState([]);
+  const [allInstallments, setAllInstallments] = useState([]);
+  const [allPayments, setAllPayments] = useState([]);
+  const [allActivities, setAllActivities] = useState([]);
+  const [allNotifications, setAllNotifications] = useState([]);
   const [markers, setMarkers] = useState([]);
   const [settings, setSettings] = useState({});
   const [users, setUsers] = useState([]);
@@ -102,18 +101,18 @@ export const AppProvider = ({ children }) => {
         supabase.from('loans').select('*').order('created_at', { ascending: false }),
         supabase.from('installments').select('*').order('number'),
         supabase.from('payments').select('*').order('created_at', { ascending: false }),
-        supabase.from('activities').select('*').order('date', { ascending: false }).limit(200),
-        supabase.from('notifications').select('*').order('date', { ascending: false }).limit(200),
+        supabase.from('activities').select('*').order('date', { ascending: false }).limit(500),
+        supabase.from('notifications').select('*').order('date', { ascending: false }).limit(500),
         supabase.from('markers').select('*'),
         supabase.from('settings').select('*').limit(1),
         supabase.from('app_users').select('*').order('created_at'),
       ]);
-      setClients((cR.data || []).map(toCamel));
-      setLoans((lR.data || []).map(toCamel));
-      setInstallments((iR.data || []).map(toCamel));
-      setPayments((pR.data || []).map(toCamel));
-      setActivities((aR.data || []).map(toCamel));
-      setNotifications((nR.data || []).map(toCamel));
+      setAllClients((cR.data || []).map(toCamel));
+      setAllLoans((lR.data || []).map(toCamel));
+      setAllInstallments((iR.data || []).map(toCamel));
+      setAllPayments((pR.data || []).map(toCamel));
+      setAllActivities((aR.data || []).map(toCamel));
+      setAllNotifications((nR.data || []).map(toCamel));
       setMarkers((mR.data || []).map(toCamel));
       setSettings(sR.data?.[0] ? toCamel(sR.data[0]) : {});
       setUsers((uR.data || []).map(toCamel));
@@ -123,22 +122,57 @@ export const AppProvider = ({ children }) => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // ── FILTER DATA PER USER FOR ISOLATION ──
+  const clients = useMemo(() => {
+    if (!currentUser?.id) return allClients;
+    return allClients.filter(c => c.userId === currentUser.id);
+  }, [allClients, currentUser?.id]);
+
+  const loans = useMemo(() => {
+    if (!currentUser?.id) return allLoans;
+    return allLoans.filter(l => l.userId === currentUser.id);
+  }, [allLoans, currentUser?.id]);
+
+  const installments = useMemo(() => {
+    if (!currentUser?.id) return allInstallments;
+    return allInstallments.filter(i => i.userId === currentUser.id);
+  }, [allInstallments, currentUser?.id]);
+
+  const payments = useMemo(() => {
+    if (!currentUser?.id) return allPayments;
+    return allPayments.filter(p => p.userId === currentUser.id);
+  }, [allPayments, currentUser?.id]);
+
+  const activities = useMemo(() => {
+    if (!currentUser?.id) return allActivities;
+    return allActivities.filter(a => a.userId === currentUser.id);
+  }, [allActivities, currentUser?.id]);
+
+  const notifications = useMemo(() => {
+    if (!currentUser?.id) return allNotifications;
+    return allNotifications.filter(n => n.userId === currentUser.id);
+  }, [allNotifications, currentUser?.id]);
+
   // ── ACTIVITY & NOTIFICATION HELPERS ──
   const addActivity = useCallback(async (type, description, relatedId = null) => {
-    const row = { type, description, date: new Date().toISOString(), related_id: relatedId };
+    const row = { type, description, date: new Date().toISOString(), related_id: relatedId, user_id: currentUser?.id };
     const { data } = await supabase.from('activities').insert(row).select().single();
-    if (data) setActivities(prev => [toCamel(data), ...prev]);
-  }, []);
+    if (data) setAllActivities(prev => [toCamel(data), ...prev]);
+  }, [currentUser?.id]);
 
   const addNotification = useCallback(async (type, message, relatedId = null) => {
-    const row = { type, message, date: new Date().toISOString().split('T')[0], read: false, related_id: relatedId };
+    const row = { type, message, date: new Date().toISOString().split('T')[0], read: false, related_id: relatedId, user_id: currentUser?.id };
     const { data } = await supabase.from('notifications').insert(row).select().single();
-    if (data) setNotifications(prev => [toCamel(data), ...prev]);
-  }, []);
+    if (data) setAllNotifications(prev => [toCamel(data), ...prev]);
+  }, [currentUser?.id]);
 
   // ── CLIENT CRUD ──
   const addClient = useCallback(async (client) => {
-    const row = toSnake({ ...client, tags: client.tags || [] });
+    const row = toSnake({
+      ...client,
+      userId: client.userId || currentUser?.id,
+      tags: client.tags || []
+    });
     delete row.id;
     const { data, error } = await supabase.from('clients').insert(row).select().single();
     if (error) {
@@ -147,10 +181,10 @@ export const AppProvider = ({ children }) => {
       return null;
     }
     const c = toCamel(data);
-    setClients(prev => [c, ...prev]);
+    setAllClients(prev => [c, ...prev]);
     await addActivity('client_created', `Novo cliente cadastrado: ${client.name}`, c.id);
     return c;
-  }, [addActivity]);
+  }, [addActivity, currentUser?.id]);
 
   const updateClient = useCallback(async (id, updates) => {
     const row = toSnake(updates);
@@ -161,7 +195,7 @@ export const AppProvider = ({ children }) => {
       alert('Erro ao atualizar cliente no banco de dados: ' + error.message);
       return;
     }
-    setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    setAllClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
     await addActivity('client_updated', `Cliente atualizado: ${updates.name || id}`, id);
   }, [addActivity]);
 
@@ -170,10 +204,10 @@ export const AppProvider = ({ children }) => {
     await supabase.from('installments').delete().eq('client_id', id);
     await supabase.from('loans').delete().eq('client_id', id);
     await supabase.from('clients').delete().eq('id', id);
-    setPayments(prev => prev.filter(p => p.clientId !== id));
-    setInstallments(prev => prev.filter(i => i.clientId !== id));
-    setLoans(prev => prev.filter(l => l.clientId !== id));
-    setClients(prev => prev.filter(c => c.id !== id));
+    setAllPayments(prev => prev.filter(p => p.clientId !== id));
+    setAllInstallments(prev => prev.filter(i => i.clientId !== id));
+    setAllLoans(prev => prev.filter(l => l.clientId !== id));
+    setAllClients(prev => prev.filter(c => c.id !== id));
     await addActivity('client_deleted', 'Cliente e todos os seus débitos foram removidos', id);
   }, [addActivity]);
 
@@ -200,8 +234,10 @@ export const AppProvider = ({ children }) => {
 
   // ── LOAN CRUD ──
   const addLoan = useCallback(async (loan) => {
+    const userIdToUse = loan.userId || currentUser?.id;
     const newLoan = {
       ...loan,
+      userId: userIdToUse,
       title: loan.title || 'Empréstimo Sem Título',
       calculationMode: loan.calculationMode || 'amortized',
       status: 'active',
@@ -209,7 +245,6 @@ export const AppProvider = ({ children }) => {
 
     const loanRow = toSnake(newLoan);
     delete loanRow.id;
-    delete loanRow.user_id;
 
     const { data: loanData, error: loanErr } = await supabase.from('loans').insert(loanRow).select().single();
     if (loanErr) {
@@ -230,7 +265,7 @@ export const AppProvider = ({ children }) => {
         const isLast = i === count - 1;
         const principal = isLast ? Number(savedLoan.principalAmount) : 0;
         newInstallments.push({
-          loan_id: savedLoan.id, client_id: savedLoan.clientId, number: i + 1,
+          loan_id: savedLoan.id, client_id: savedLoan.clientId, user_id: userIdToUse, number: i + 1,
           due_date: dueDateStr,
           principal_amount: Math.round(principal * 100) / 100,
           interest_amount: Math.round(interestPerInst * 100) / 100,
@@ -245,7 +280,7 @@ export const AppProvider = ({ children }) => {
       for (let i = 0; i < count; i++) {
         const dueDateStr = calculateDueDate(savedLoan.firstDueDate, savedLoan.periodicity, i);
         newInstallments.push({
-          loan_id: savedLoan.id, client_id: savedLoan.clientId, number: i + 1,
+          loan_id: savedLoan.id, client_id: savedLoan.clientId, user_id: userIdToUse, number: i + 1,
           due_date: dueDateStr,
           principal_amount: Math.round(principalPerInst * 100) / 100,
           interest_amount: Math.round(interestPerInst * 100) / 100,
@@ -257,21 +292,21 @@ export const AppProvider = ({ children }) => {
 
     if (newInstallments.length > 0) {
       const { data: instData } = await supabase.from('installments').insert(newInstallments).select();
-      if (instData) setInstallments(prev => [...prev, ...instData.map(toCamel)]);
+      if (instData) setAllInstallments(prev => [...prev, ...instData.map(toCamel)]);
     }
 
-    setLoans(prev => [savedLoan, ...prev]);
-    const client = clients.find(c => c.id === savedLoan.clientId);
+    setAllLoans(prev => [savedLoan, ...prev]);
+    const client = allClients.find(c => c.id === savedLoan.clientId);
     addActivity('loan_created', `Novo débito "${savedLoan.title}": R$ ${Number(savedLoan.principalAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para ${client?.name || 'Cliente'}`, savedLoan.id);
     addNotification('loan_created', `Novo débito "${savedLoan.title}" criado para ${client?.name || 'Cliente'}`, savedLoan.id);
     return savedLoan;
-  }, [clients, addActivity, addNotification]);
+  }, [allClients, addActivity, addNotification, currentUser?.id]);
 
   const updateLoan = useCallback(async (id, updates) => {
     const row = toSnake(updates);
     delete row.id;
     await supabase.from('loans').update(row).eq('id', id);
-    setLoans(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+    setAllLoans(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
     addActivity('loan_updated', 'Empréstimo atualizado', id);
   }, [addActivity]);
 
@@ -279,9 +314,9 @@ export const AppProvider = ({ children }) => {
     await supabase.from('payments').delete().eq('loan_id', id);
     await supabase.from('installments').delete().eq('loan_id', id);
     await supabase.from('loans').delete().eq('id', id);
-    setPayments(prev => prev.filter(p => p.loanId !== id));
-    setInstallments(prev => prev.filter(i => i.loanId !== id));
-    setLoans(prev => prev.filter(l => l.id !== id));
+    setAllPayments(prev => prev.filter(p => p.loanId !== id));
+    setAllInstallments(prev => prev.filter(i => i.loanId !== id));
+    setAllLoans(prev => prev.filter(l => l.id !== id));
     addActivity('loan_deleted', `Empréstimo removido: ${id}`);
   }, [addActivity]);
 
@@ -289,6 +324,7 @@ export const AppProvider = ({ children }) => {
   const registerPayment = useCallback(async (paymentData) => {
     const payRow = {
       client_id: paymentData.clientId, loan_id: paymentData.loanId,
+      user_id: currentUser?.id,
       installment_ids: paymentData.installmentIds || [],
       amount: paymentData.amount, date: paymentData.date,
       method: paymentData.method || 'pix', notes: paymentData.notes || '',
@@ -296,13 +332,13 @@ export const AppProvider = ({ children }) => {
     const { data: payData, error: payErr } = await supabase.from('payments').insert(payRow).select().single();
     if (payErr) { console.error(payErr); return null; }
     const payment = toCamel(payData);
-    setPayments(prev => [payment, ...prev]);
+    setAllPayments(prev => [payment, ...prev]);
 
     // Update installments
     let remaining = payment.amount;
     const instIds = paymentData.installmentIds || [];
     for (const instId of instIds) {
-      const inst = installments.find(i => i.id === instId);
+      const inst = allInstallments.find(i => i.id === instId);
       if (!inst) continue;
       const owed = inst.totalAmount - inst.paidAmount;
       const payForThis = Math.min(remaining, owed);
@@ -310,11 +346,11 @@ export const AppProvider = ({ children }) => {
       remaining -= payForThis;
       const newStatus = newPaid >= inst.totalAmount ? 'paid' : newPaid > 0 ? 'partial' : inst.status;
       await supabase.from('installments').update({ paid_amount: newPaid, paid_date: payment.date, status: newStatus }).eq('id', instId);
-      setInstallments(prev => prev.map(i => i.id === instId ? { ...i, paidAmount: newPaid, paidDate: payment.date, status: newStatus } : i));
+      setAllInstallments(prev => prev.map(i => i.id === instId ? { ...i, paidAmount: newPaid, paidDate: payment.date, status: newStatus } : i));
     }
 
     // Check if loan is completed
-    const loanInsts = installments.filter(i => i.loanId === paymentData.loanId);
+    const loanInsts = allInstallments.filter(i => i.loanId === paymentData.loanId);
     const allPaid = loanInsts.every(i => {
       if (instIds.includes(i.id)) {
         const owed = i.totalAmount - i.paidAmount;
@@ -324,25 +360,25 @@ export const AppProvider = ({ children }) => {
     });
     if (allPaid) {
       await supabase.from('loans').update({ status: 'completed' }).eq('id', paymentData.loanId);
-      setLoans(prev => prev.map(l => l.id === paymentData.loanId ? { ...l, status: 'completed' } : l));
+      setAllLoans(prev => prev.map(l => l.id === paymentData.loanId ? { ...l, status: 'completed' } : l));
     }
 
-    const client = clients.find(c => c.id === paymentData.clientId);
+    const client = allClients.find(c => c.id === paymentData.clientId);
     addActivity('payment', `Pagamento de R$ ${paymentData.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} recebido de ${client?.name || 'Cliente'}`, payment.id);
     addNotification('payment', `${client?.name || 'Cliente'} realizou um pagamento de R$ ${paymentData.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, payment.id);
     return payment;
-  }, [clients, installments, addActivity, addNotification]);
+  }, [allClients, allInstallments, addActivity, addNotification, currentUser?.id]);
 
   const deletePayment = useCallback(async (paymentId) => {
-    const payment = payments.find(p => p.id === paymentId);
+    const payment = allPayments.find(p => p.id === paymentId);
     if (!payment) return;
 
     await supabase.from('payments').delete().eq('id', paymentId);
-    setPayments(prev => prev.filter(p => p.id !== paymentId));
+    setAllPayments(prev => prev.filter(p => p.id !== paymentId));
 
     if (payment.installmentIds && payment.installmentIds.length > 0) {
-      const remainingPayments = payments.filter(p => p.id !== paymentId && p.loanId === payment.loanId);
-      const loanInsts = installments.filter(i => i.loanId === payment.loanId);
+      const remainingPayments = allPayments.filter(p => p.id !== paymentId && p.loanId === payment.loanId);
+      const loanInsts = allInstallments.filter(i => i.loanId === payment.loanId);
 
       for (const inst of loanInsts) {
         let paidForInst = 0;
@@ -355,45 +391,45 @@ export const AppProvider = ({ children }) => {
         }
         const newStatus = paidForInst >= inst.totalAmount ? 'paid' : paidForInst > 0 ? 'partial' : 'open';
         await supabase.from('installments').update({ paid_amount: paidForInst, paid_date: paidForInst > 0 ? lastPaidDate : null, status: newStatus }).eq('id', inst.id);
-        setInstallments(prev => prev.map(i => i.id === inst.id ? { ...i, paidAmount: paidForInst, paidDate: paidForInst > 0 ? lastPaidDate : null, status: newStatus } : i));
+        setAllInstallments(prev => prev.map(i => i.id === inst.id ? { ...i, paidAmount: paidForInst, paidDate: paidForInst > 0 ? lastPaidDate : null, status: newStatus } : i));
       }
       await supabase.from('loans').update({ status: 'active' }).eq('id', payment.loanId);
-      setLoans(prev => prev.map(l => l.id === payment.loanId ? { ...l, status: 'active' } : l));
+      setAllLoans(prev => prev.map(l => l.id === payment.loanId ? { ...l, status: 'active' } : l));
     }
 
     addActivity('payment_deleted', `Pagamento de R$ ${payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi estornado/removido.`, paymentId);
-  }, [payments, installments, addActivity]);
+  }, [allPayments, allInstallments, addActivity]);
 
   // ── SIGNATURE ──
   const saveSignature = useCallback(async (installmentId, signatureData) => {
     const signedAt = new Date().toISOString();
     await supabase.from('installments').update({ signature: signatureData, signed_at: signedAt }).eq('id', installmentId);
-    setInstallments(prev => prev.map(i => i.id === installmentId ? { ...i, signature: signatureData, signedAt } : i));
+    setAllInstallments(prev => prev.map(i => i.id === installmentId ? { ...i, signature: signatureData, signedAt } : i));
     addActivity('signature_saved', `Assinatura digital registrada no recibo #${installmentId}`, installmentId);
   }, [addActivity]);
 
   // ── NOTIFICATIONS ──
   const markNotificationRead = useCallback(async (id) => {
     await supabase.from('notifications').update({ read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setAllNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   }, []);
 
   const markAllNotificationsRead = useCallback(async () => {
     const unread = notifications.filter(n => !n.read).map(n => n.id);
     if (unread.length > 0) {
       await supabase.from('notifications').update({ read: true }).in('id', unread);
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setAllNotifications(prev => prev.map(n => (unread.includes(n.id) ? { ...n, read: true } : n)));
     }
   }, [notifications]);
 
   // ── MARKERS ──
   const addMarker = useCallback(async (marker) => {
-    const row = toSnake(marker);
+    const row = toSnake({ ...marker, userId: currentUser?.id });
     delete row.id;
     const { data } = await supabase.from('markers').insert(row).select().single();
     if (data) { const m = toCamel(data); setMarkers(prev => [...prev, m]); return m; }
     return null;
-  }, []);
+  }, [currentUser?.id]);
 
   const deleteMarker = useCallback(async (id) => {
     await supabase.from('markers').delete().eq('id', id);
@@ -402,29 +438,47 @@ export const AppProvider = ({ children }) => {
 
   // ── SETTINGS ──
   const updateSettings = useCallback(async (updates) => {
-    const row = toSnake(updates);
-    if (settings.id) {
-      await supabase.from('settings').update(row).eq('id', settings.id);
-    } else {
-      const { data } = await supabase.from('settings').insert(row).select().single();
-      if (data) { setSettings(toCamel(data)); return; }
-    }
-    setSettings(prev => ({ ...prev, ...updates }));
-  }, [settings]);
+    if (!currentUser?.id) return;
 
-  // ── RESET DATA ──
+    // Update per-user company details in app_users
+    const userUpdates = {};
+    if (updates.companyName !== undefined) userUpdates.company_name = updates.companyName;
+    if (updates.companyLogo !== undefined) userUpdates.company_logo = updates.companyLogo;
+    if (updates.adminName !== undefined) userUpdates.name = updates.adminName;
+
+    if (Object.keys(userUpdates).length > 0) {
+      await supabase.from('app_users').update(userUpdates).eq('id', currentUser.id);
+      const session = {
+        ...currentUser,
+        name: updates.adminName !== undefined ? updates.adminName : currentUser.name,
+        companyName: updates.companyName !== undefined ? updates.companyName : currentUser.companyName,
+        companyLogo: updates.companyLogo !== undefined ? updates.companyLogo : currentUser.companyLogo,
+      };
+      setCurrentUser(session);
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session));
+    }
+
+    setSettings(prev => ({ ...prev, ...updates }));
+  }, [currentUser]);
+
+  // ── RESET DATA PER USER ──
   const resetData = useCallback(async () => {
+    if (!currentUser?.id) return;
     await Promise.all([
-      supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('installments').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('loans').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('clients').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('activities').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('notifications').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('payments').delete().eq('user_id', currentUser.id),
+      supabase.from('installments').delete().eq('user_id', currentUser.id),
+      supabase.from('loans').delete().eq('user_id', currentUser.id),
+      supabase.from('clients').delete().eq('user_id', currentUser.id),
+      supabase.from('activities').delete().eq('user_id', currentUser.id),
+      supabase.from('notifications').delete().eq('user_id', currentUser.id),
     ]);
-    setClients([]); setLoans([]); setInstallments([]);
-    setPayments([]); setActivities([]); setNotifications([]);
-  }, []);
+    setAllClients(prev => prev.filter(c => c.userId !== currentUser.id));
+    setAllLoans(prev => prev.filter(l => l.userId !== currentUser.id));
+    setAllInstallments(prev => prev.filter(i => i.userId !== currentUser.id));
+    setAllPayments(prev => prev.filter(p => p.userId !== currentUser.id));
+    setAllActivities(prev => prev.filter(a => a.userId !== currentUser.id));
+    setAllNotifications(prev => prev.filter(n => n.userId !== currentUser.id));
+  }, [currentUser?.id]);
 
   // ── COMPUTED HELPERS ──
   const getClientLoans = useCallback((clientId) => loans.filter(l => l.clientId === clientId), [loans]);
@@ -521,6 +575,7 @@ export const AppProvider = ({ children }) => {
 
   const value = {
     clients, loans, installments, payments, activities, notifications, markers, settings, users,
+    allClients, allLoans, allInstallments, allPayments,
     stats, currentUser, loading,
     login, logout, addUser, updateUser, deleteUser,
     searchQuery, setSearchQuery, sidebarOpen, setSidebarOpen,
