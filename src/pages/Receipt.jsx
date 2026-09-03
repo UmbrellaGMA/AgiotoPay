@@ -30,7 +30,7 @@ const toCamel = (row) => {
 
 export default function Receipt() {
   const { id } = useParams(); // installment ID
-  const { installments = [], loans = [], clients = [], settings: globalSettings = {}, saveSignature, loading: contextLoading } = useApp() || {};
+  const { installments = [], loans = [], clients = [], users = [], currentUser = null, settings: globalSettings = {}, saveSignature, loading: contextLoading } = useApp() || {};
   const canvasRef = useRef(null);
 
   const [directData, setDirectData] = useState(null);
@@ -82,6 +82,12 @@ export default function Receipt() {
           .eq('id', loan.client_id)
           .maybeSingle() : { data: null };
 
+        const { data: creatorUser } = (loan && loan.user_id) ? await supabase
+          .from('app_users')
+          .select('*')
+          .eq('id', loan.user_id)
+          .maybeSingle() : { data: null };
+
         const { data: settingsArr } = await supabase
           .from('settings')
           .select('*')
@@ -93,6 +99,7 @@ export default function Receipt() {
             loan: loan ? toCamel(loan) : null,
             client: client ? toCamel(client) : null,
             settings: settingsArr?.[0] ? toCamel(settingsArr[0]) : {},
+            creatorUser: creatorUser ? toCamel(creatorUser) : null,
           });
         }
       } catch (err) {
@@ -302,9 +309,9 @@ export default function Receipt() {
   const signedDateStr = installment.signedAt ? new Date(installment.signedAt).toLocaleDateString('pt-BR') : now.toLocaleDateString('pt-BR');
   const signedTimeStr = installment.signedAt ? new Date(installment.signedAt).toLocaleTimeString('pt-BR') : now.toLocaleTimeString('pt-BR');
 
-  const activeUser = (loan?.userId ? users.find(u => u.id === loan.userId) : null) || currentUser || {};
-  const companyLogo = activeUser.companyLogo || settings.companyLogo;
-  const companyName = activeUser.companyName || settings.companyName;
+  const activeUser = directData?.creatorUser || (loan?.userId && Array.isArray(users) ? users.find(u => u.id === loan.userId) : null) || currentUser || {};
+  const companyLogo = activeUser?.companyLogo || settings?.companyLogo || null;
+  const companyName = activeUser?.companyName || settings?.companyName || null;
 
   return (
     <div className="receipt-page">
