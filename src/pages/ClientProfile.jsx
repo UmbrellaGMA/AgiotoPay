@@ -22,7 +22,7 @@ const toCamel = (row) => {
 export default function ClientProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { clients = [], loans = [], installments = [], payments = [], updateClient, addLoan, loading: contextLoading } = useApp() || {};
+  const { clients = [], loans = [], installments = [], payments = [], updateClient, addLoan, currentUser, loading: contextLoading } = useApp() || {};
   
   const [tab, setTab] = useState('overview');
   const [editing, setEditing] = useState(false);
@@ -38,7 +38,7 @@ export default function ClientProfile() {
   useEffect(() => {
     let isMounted = true;
 
-    if (contextClient || !id) {
+    if (contextClient || !id || !currentUser?.id) {
       setDirectLoading(false);
       return;
     }
@@ -47,7 +47,7 @@ export default function ClientProfile() {
 
     async function fetchSingleClient() {
       try {
-        const { data, error } = await supabase.from('clients').select('*').eq('id', id).maybeSingle();
+        const { data, error } = await supabase.from('clients').select('*').eq('id', id).eq('user_id', currentUser.id).maybeSingle();
         if (isMounted && data && !error) {
           setDirectClient(toCamel(data));
         }
@@ -60,7 +60,7 @@ export default function ClientProfile() {
 
     fetchSingleClient();
     return () => { isMounted = false; };
-  }, [id, contextClient]);
+  }, [id, contextClient, currentUser?.id]);
 
   const client = contextClient || directClient;
   const hasData = Boolean(client);

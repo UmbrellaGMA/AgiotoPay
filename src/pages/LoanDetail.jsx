@@ -26,7 +26,7 @@ const toCamel = (row) => {
 export default function LoanDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { loans = [], clients = [], installments = [], settings = {}, deleteLoan, loading: contextLoading } = useApp() || {};
+  const { loans = [], clients = [], installments = [], settings = {}, deleteLoan, currentUser, loading: contextLoading } = useApp() || {};
   const [copiedId, setCopiedId] = useState(null);
   const [directLoan, setDirectLoan] = useState(null);
   const [directLoading, setDirectLoading] = useState(false);
@@ -38,7 +38,7 @@ export default function LoanDetail() {
   useEffect(() => {
     let isMounted = true;
 
-    if (contextLoan || !id) {
+    if (contextLoan || !id || !currentUser?.id) {
       setDirectLoading(false);
       return;
     }
@@ -47,7 +47,7 @@ export default function LoanDetail() {
 
     async function fetchSingleLoan() {
       try {
-        const { data, error } = await supabase.from('loans').select('*').eq('id', id).maybeSingle();
+        const { data, error } = await supabase.from('loans').select('*').eq('id', id).eq('user_id', currentUser.id).maybeSingle();
         if (isMounted && data && !error) {
           setDirectLoan(toCamel(data));
         }
@@ -60,7 +60,7 @@ export default function LoanDetail() {
 
     fetchSingleLoan();
     return () => { isMounted = false; };
-  }, [id, contextLoan]);
+  }, [id, contextLoan, currentUser?.id]);
 
   const loan = contextLoan || directLoan;
   const hasData = Boolean(loan);
