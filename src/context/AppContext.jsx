@@ -92,17 +92,29 @@ export const AppProvider = ({ children }) => {
 
   const toggleTheme = useCallback(() => setTheme(p => p === 'light' ? 'dark' : 'light'), []);
 
-  // ── LOAD ALL DATA FROM SUPABASE ──
+  // ── LOAD USER SPECIFIC DATA FROM SUPABASE ──
   const fetchAll = useCallback(async () => {
+    if (!currentUser?.id) {
+      setAllClients([]);
+      setAllLoans([]);
+      setAllInstallments([]);
+      setAllPayments([]);
+      setAllActivities([]);
+      setAllNotifications([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
+      const userId = currentUser.id;
       const [cR, lR, iR, pR, aR, nR, mR, sR, uR] = await Promise.all([
-        supabase.from('clients').select('*').order('created_at', { ascending: false }),
-        supabase.from('loans').select('*').order('created_at', { ascending: false }),
-        supabase.from('installments').select('*').order('number'),
-        supabase.from('payments').select('*').order('created_at', { ascending: false }),
-        supabase.from('activities').select('*').order('date', { ascending: false }).limit(500),
-        supabase.from('notifications').select('*').order('date', { ascending: false }).limit(500),
+        supabase.from('clients').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('loans').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('installments').select('*').eq('user_id', userId).order('number'),
+        supabase.from('payments').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('activities').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(500),
+        supabase.from('notifications').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(500),
         supabase.from('markers').select('*'),
         supabase.from('settings').select('*').limit(1),
         supabase.from('app_users').select('*').order('created_at'),
@@ -118,7 +130,7 @@ export const AppProvider = ({ children }) => {
       setUsers((uR.data || []).map(toCamel));
     } catch (e) { console.error('Fetch error:', e); }
     setLoading(false);
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     fetchAll();
@@ -142,32 +154,32 @@ export const AppProvider = ({ children }) => {
 
   // ── FILTER DATA PER USER FOR ISOLATION ──
   const clients = useMemo(() => {
-    if (!currentUser?.id) return allClients;
+    if (!currentUser?.id) return [];
     return allClients.filter(c => c.userId === currentUser.id);
   }, [allClients, currentUser?.id]);
 
   const loans = useMemo(() => {
-    if (!currentUser?.id) return allLoans;
+    if (!currentUser?.id) return [];
     return allLoans.filter(l => l.userId === currentUser.id);
   }, [allLoans, currentUser?.id]);
 
   const installments = useMemo(() => {
-    if (!currentUser?.id) return allInstallments;
+    if (!currentUser?.id) return [];
     return allInstallments.filter(i => i.userId === currentUser.id);
   }, [allInstallments, currentUser?.id]);
 
   const payments = useMemo(() => {
-    if (!currentUser?.id) return allPayments;
+    if (!currentUser?.id) return [];
     return allPayments.filter(p => p.userId === currentUser.id);
   }, [allPayments, currentUser?.id]);
 
   const activities = useMemo(() => {
-    if (!currentUser?.id) return allActivities;
+    if (!currentUser?.id) return [];
     return allActivities.filter(a => a.userId === currentUser.id);
   }, [allActivities, currentUser?.id]);
 
   const notifications = useMemo(() => {
-    if (!currentUser?.id) return allNotifications;
+    if (!currentUser?.id) return [];
     return allNotifications.filter(n => n.userId === currentUser.id);
   }, [allNotifications, currentUser?.id]);
 
@@ -186,9 +198,13 @@ export const AppProvider = ({ children }) => {
 
   // ── CLIENT CRUD ──
   const addClient = useCallback(async (client) => {
+    if (!currentUser?.id) {
+      alert('Sua sessão expirou. Faça login novamente para cadastrar clientes.');
+      return null;
+    }
     const row = toSnake({
       ...client,
-      userId: client.userId || currentUser?.id,
+      userId: currentUser.id,
       tags: client.tags || []
     });
     delete row.id;
@@ -252,7 +268,11 @@ export const AppProvider = ({ children }) => {
 
   // ── LOAN CRUD ──
   const addLoan = useCallback(async (loan) => {
-    const userIdToUse = loan.userId || currentUser?.id;
+    if (!currentUser?.id) {
+      alert('Sua sessão expirou. Faça login novamente para cadastrar empréstimos.');
+      return null;
+    }
+    const userIdToUse = currentUser.id;
     const newLoan = {
       ...loan,
       userId: userIdToUse,
@@ -340,9 +360,13 @@ export const AppProvider = ({ children }) => {
 
   // ── PAYMENT ──
   const registerPayment = useCallback(async (paymentData) => {
+    if (!currentUser?.id) {
+      alert('Sua sessão expirou. Faça login novamente para registrar pagamentos.');
+      return null;
+    }
     const payRow = {
       client_id: paymentData.clientId, loan_id: paymentData.loanId,
-      user_id: currentUser?.id,
+      user_id: currentUser.id,
       installment_ids: paymentData.installmentIds || [],
       amount: paymentData.amount, date: paymentData.date,
       method: paymentData.method || 'pix', notes: paymentData.notes || '',
